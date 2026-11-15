@@ -1,0 +1,6 @@
+﻿# Build output and runtime data
+out/
+data/
+
+# College template (not our work)
+Java Project Report Format.docx
