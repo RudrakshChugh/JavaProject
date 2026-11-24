@@ -1,0 +1,8 @@
+# Keep the image small: the container compiles from src/ and serves web/, nothing else.
+.git
+out
+data
+docs
+*.md
+*.docx
+*.pdf

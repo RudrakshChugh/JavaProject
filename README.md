@@ -194,6 +194,8 @@ Locks are always taken in the order service → ledger, and the ledger never cal
 │       ├── RaceDemo.java          # Concurrency race for the web page
 │       └── Json.java              # Minimal JSON writer
 ├── web/                           # Front end: index.html, styles.css, app.js
+├── Dockerfile                     # Container build, for hosting services
+├── render.yaml                    # Render deployment settings
 ├── data/                          # Created at runtime (saved state and reports)
 ├── out/                           # Compiled classes
 └── README.md
@@ -273,6 +275,33 @@ A session can only be confirmed once it has started, so to show "confirm, and th
 1. Sign in as a tutor and add a time slot one or two minutes from now.
 2. In a second browser window, sign in as another student and book it.
 3. When the countdown on **My bookings** reaches the start time, the **Confirm it took place** button appears by itself.
+
+---
+
+## Deploying the Web App
+
+The web app can run on a hosting service that builds a Dockerfile. GitHub Pages cannot host it, because it only serves static files and this app needs its Java server.
+
+The repository includes a `Dockerfile` and a `render.yaml` for [Render](https://render.com), whose free web service needs no payment card:
+
+1. Create a Render account and open `https://render.com/deploy?repo=https://github.com/RudrakshChugh/JavaProject`.
+2. Confirm the service it proposes (`skill-exchange`, free plan). Render builds the image and gives the app an `onrender.com` address with HTTPS.
+
+What changes when it runs on a host:
+
+| On your machine | On a hosting service |
+|---|---|
+| Listens on `localhost` only | Listens on every interface, on the port given in `PORT` |
+| Answers only to `localhost` | Also answers to its public name, from `PUBLIC_HOST` or Render's `RENDER_EXTERNAL_HOSTNAME` |
+| Session cookie sent over HTTP | Session cookie marked `Secure` when the visitor is on HTTPS |
+
+Things to know about a free deployment:
+
+- **Saved data does not last.** Render's free service has no permanent disk and goes to sleep after 15 minutes without visitors. When it wakes, the app starts again with the demo data, and everyone is signed out. The first visit after a sleep takes about a minute.
+- **One time zone.** Slot times are plain local times. The `Dockerfile` sets `TZ=Asia/Kolkata`; change it if your users are elsewhere.
+- **It is a public demo.** Anyone with the link can create a profile (up to 500) and sign in to the demo profiles.
+
+On another host, set `PUBLIC_HOST` to the address the app is served on, for example `PUBLIC_HOST=skills.example.com`.
 
 ---
 

@@ -25,6 +25,7 @@ import java.time.format.DateTimeParseException;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Semaphore;
 
 import static skillexchange.web.Json.obj;
 
@@ -40,6 +41,10 @@ import static skillexchange.web.Json.obj;
  *   java -cp out skillexchange.web.WebServer            start on port 8080
  *   java -cp out skillexchange.web.WebServer 9090       another port
  *   java -cp out skillexchange.web.WebServer --reset    delete saved data and start with demo data
+ *
+ * On your own machine the server listens on localhost only. On a hosting service it is told its
+ * public name through an environment variable (PUBLIC_HOST, or RENDER_EXTERNAL_HOSTNAME which Render
+ * sets by itself), and the port through PORT; it then listens on every network interface.
  */
 public class WebServer {
     private static final int STARTING_CREDITS = 5;
@@ -52,13 +57,14 @@ public class WebServer {
     private static final double MAX_FEE = 100_000;
     private static final int MAX_DAYS_AHEAD = 365;   // how far in the future a slot may be published
     private static final int RECENT_BOOKINGS = 10;
+    private static final int MAX_STUDENTS = 500;     // a public copy must not fill up with endless sign-ups
 
     private static final String SESSION_COOKIE = "skx_session";
     private static final int SESSION_SECONDS = 7 * 24 * 60 * 60;
     private static final int MAX_WRONG_PASSWORDS = 5;   // in a row, before sign-in pauses for that profile
     private static final int LOCK_SECONDS = 30;
 
-    // This server only answers on the local machine, so these are the only names a browser can reach it by.
+    // The names a browser can reach this server by on the machine it runs on.
     private static final Set<String> LOCAL_HOSTS = Set.of("localhost", "127.0.0.1", "[::1]");
     private static final Map<String, String> CONTENT_TYPES = Map.of(
             "html", "text/html; charset=utf-8", "css", "text/css; charset=utf-8",
@@ -69,6 +75,10 @@ public class WebServer {
     private final CreditLedger ledger;
     private final DataStore store;
     private final Path webRoot;
+    /** The public names of this server when it runs on a hosting service. Empty on your own machine. */
+    private final Set<String> publicHosts;
+    /** The concurrency race is heavy (1,600 booking attempts), so only one runs at a time. */
+    private final Semaphore raceSlot = new Semaphore(1);
 
     /** Who is signed in. Kept in memory only, so restarting the server signs everyone out. */
     private final Map<String, Session> sessions = new ConcurrentHashMap<>();
@@ -79,21 +89,38 @@ public class WebServer {
 
     private record Attempts(int count, long lockedUntilMillis) { }
 
-    WebServer(BookingService service, DataStore store, Path webRoot) {
+    WebServer(BookingService service, DataStore store, Path webRoot, Set<String> publicHosts) {
         this.service = service;
         this.ledger = service.getLedger();
         this.store = store;
         this.webRoot = webRoot;
+        this.publicHosts = publicHosts;
+    }
+
+    /** The server's public names, from PUBLIC_HOST (comma-separated) and RENDER_EXTERNAL_HOSTNAME. */
+    static Set<String> publicHostsFromEnvironment() {
+        Set<String> hosts = new LinkedHashSet<>();
+        for (String variable : List.of("PUBLIC_HOST", "RENDER_EXTERNAL_HOSTNAME")) {
+            String value = System.getenv(variable);
+            if (value == null) continue;
+            for (String host : value.split(",")) {
+                if (!host.isBlank()) hosts.add(host.trim().toLowerCase(Locale.ROOT));
+            }
+        }
+        return hosts;
     }
 
     public static void main(String[] args) throws Exception {
         int port = 8080;
         boolean reset = false;
+        // A hosting service says which port to listen on through the PORT variable. An argument overrides it.
+        List<String> portSources = new ArrayList<>();
+        if (System.getenv("PORT") != null) portSources.add(System.getenv("PORT").trim());
         for (String a : args) {
-            if (a.equals("--reset")) {
-                reset = true;
-                continue;
-            }
+            if (a.equals("--reset")) reset = true;
+            else portSources.add(a);
+        }
+        for (String a : portSources) {
             try {
                 port = Integer.parseInt(a);
             } catch (NumberFormatException e) {
@@ -127,7 +154,7 @@ public class WebServer {
             System.out.println("Run with --reset to start fresh with demo data (this deletes saved data).");
         }
         try {
-            new WebServer(service, store, webRoot).start(port);
+            new WebServer(service, store, webRoot, publicHostsFromEnvironment()).start(port);
         } catch (BindException e) {
             System.out.println("ERROR: port " + port + " is already in use. Is the app already running?");
             System.out.println("Stop the other copy, or pick another port: WebServer " + (port + 1));
@@ -135,13 +162,27 @@ public class WebServer {
     }
 
     void start(int port) throws IOException {
-        HttpServer server = HttpServer.create(new InetSocketAddress("localhost", port), 0);
+        // With no public name configured, only this machine can connect. With one, the hosting
+        // service's router has to be able to reach the server, so it listens on every interface.
+        // (The Dockerfile also sets LISTEN_ALL, so a container is reachable even before its name is configured.)
+        boolean everyInterface = !publicHosts.isEmpty() || "true".equalsIgnoreCase(System.getenv("LISTEN_ALL"));
+        InetSocketAddress address = everyInterface
+                ? new InetSocketAddress(port)
+                : new InetSocketAddress("localhost", port);
+        HttpServer server = HttpServer.create(address, 0);
         server.createContext("/api/", this::handleApi);
         server.createContext("/", this::handleStatic);
         server.setExecutor(Executors.newFixedThreadPool(16));   // many requests at once
         server.start();
         Runtime.getRuntime().addShutdownHook(new Thread(this::saveWithReports));
-        System.out.println("Skill Exchange is running at http://localhost:" + port + "   (Ctrl+C to stop)");
+        if (!everyInterface) {
+            System.out.println("Skill Exchange is running at http://localhost:" + port + "   (Ctrl+C to stop)");
+        } else if (publicHosts.isEmpty()) {
+            System.out.println("Skill Exchange is listening on port " + port + ", but has no public name yet.");
+            System.out.println("Set PUBLIC_HOST to the address it is served on, or the pages will load but nothing will work.");
+        } else {
+            System.out.println("Skill Exchange is listening on port " + port + " for " + publicHosts);
+        }
     }
 
     // ---------- API ----------
@@ -180,17 +221,22 @@ public class WebServer {
     /**
      * Refuses requests that another web site is trying to send through the visitor's browser.
      *
-     * 1. The Host header must be one of this machine's own names. A page on another site that has
-     *    pointed its own domain at 127.0.0.1 ("DNS rebinding") still sends its own domain as Host.
-     * 2. A browser adds an Origin header to every POST. It must name this same server.
+     * 1. The Host header must be one of this server's own names: localhost, or a public name it was
+     *    configured with. A page on another site that has pointed its own domain at this server
+     *    ("DNS rebinding") still sends its own domain as Host.
+     * 2. A browser adds an Origin header to every POST. It must name this same server. On a hosting
+     *    service the visitor reaches it over HTTPS, so both spellings are accepted.
      * Requests without an Origin (curl, or a plain GET) pass the second check.
      */
-    private static void checkOrigin(HttpExchange ex) {
+    private void checkOrigin(HttpExchange ex) {
         String host = ex.getRequestHeaders().getFirst("Host");
-        if (host == null || !LOCAL_HOSTS.contains(hostName(host)))
-            throw new ApiException(403, "Forbidden", "This server only answers to localhost");
+        String name = host == null ? null : hostName(host);
+        if (name == null || !(LOCAL_HOSTS.contains(name) || publicHosts.contains(name)))
+            throw new ApiException(403, "Forbidden", "This server does not answer to that address. "
+                    + "If this is a deployment, set PUBLIC_HOST to its public name.");
         String origin = ex.getRequestHeaders().getFirst("Origin");
-        if (origin != null && ex.getRequestMethod().equals("POST") && !origin.equals("http://" + host))
+        if (origin != null && ex.getRequestMethod().equals("POST")
+                && !origin.equals("http://" + host) && !origin.equals("https://" + host))
             throw new ApiException(403, "Forbidden", "Requests from other sites are not allowed");
     }
 
@@ -217,7 +263,7 @@ public class WebServer {
             if (st == null) throw new ApiException(404, "NotFound", "No student with id " + s[1]);
             return profileOf(st);
         }
-        if (post && path.equals("demo/race")) return RaceDemo.run();
+        if (post && path.equals("demo/race")) return race();
 
         // Signing in and out
         if (get && path.equals("me")) {
@@ -250,6 +296,16 @@ public class WebServer {
             return obj("ok", true);
         }
         throw new ApiException(404, "NotFound", "No such endpoint: " + method + " /api/" + path);
+    }
+
+    private Object race() throws Exception {
+        if (!raceSlot.tryAcquire())
+            throw new ApiException(429, "Busy", "Another race is running right now. Try again in a moment.");
+        try {
+            return RaceDemo.run();
+        } finally {
+            raceSlot.release();
+        }
     }
 
     // ---------- Sessions ----------
@@ -299,8 +355,11 @@ public class WebServer {
      * along with a request that started on another site.
      */
     private static void setSessionCookie(HttpExchange ex, String token, int maxAgeSeconds) {
+        // A hosting service's router handles HTTPS and passes the request on, saying so in this header.
+        // "Secure" then tells the browser never to send the cookie over plain HTTP.
+        boolean https = "https".equalsIgnoreCase(ex.getRequestHeaders().getFirst("X-Forwarded-Proto"));
         ex.getResponseHeaders().add("Set-Cookie", SESSION_COOKIE + "=" + token
-                + "; Path=/; Max-Age=" + maxAgeSeconds + "; HttpOnly; SameSite=Strict");
+                + "; Path=/; Max-Age=" + maxAgeSeconds + "; HttpOnly; SameSite=Strict" + (https ? "; Secure" : ""));
     }
 
     private Object login(HttpExchange ex, Map<String, String> p) {
@@ -346,6 +405,8 @@ public class WebServer {
         Student st;
         // Hold the service's lock so no other request can take the same new id in between.
         synchronized (service) {
+            if (service.getAllStudents().size() >= MAX_STUDENTS)
+                throw new ApiException(403, "Full", "This copy of the app has reached its limit of " + MAX_STUDENTS + " profiles");
             st = new Student(service.nextStudentId(), name, email.isEmpty() ? null : email, password);
             service.registerStudent(st, STARTING_CREDITS);
         }
