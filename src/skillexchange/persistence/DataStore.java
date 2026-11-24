@@ -36,8 +36,10 @@ public class DataStore {
     /**
      * Writes to a temp file first, then renames it over the real file.
      * If the program crashes mid-save, the previous save stays intact.
+     * Synchronized because the web server can save from several request threads at once,
+     * and they all share the same temp file.
      */
-    public void save(BookingService service) throws PersistenceException {
+    public synchronized void save(BookingService service) throws PersistenceException {
         Path target = getStateFile();
         Path temp = dir.resolve(STATE_FILE + ".tmp");
         try {
@@ -85,7 +87,7 @@ public class DataStore {
 
     // ---------- Text exports ----------
 
-    public Path exportSessionHistory(BookingService service) throws PersistenceException {
+    public synchronized Path exportSessionHistory(BookingService service) throws PersistenceException {
         Path file = dir.resolve("sessions.csv");
         try {
             Files.createDirectories(dir);
@@ -107,7 +109,7 @@ public class DataStore {
         return file;
     }
 
-    public Path exportBalances(BookingService service) throws PersistenceException {
+    public synchronized Path exportBalances(BookingService service) throws PersistenceException {
         Path file = dir.resolve("balances.txt");
         CreditLedger ledger = service.getLedger();
         try {

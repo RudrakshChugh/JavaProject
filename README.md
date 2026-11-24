@@ -30,6 +30,22 @@ Each listing is one of three types:
 
 ---
 
+## Screenshots
+
+The web front end, served by the JDK's built-in HTTP server:
+
+<p align="center">
+  <img src="docs/screenshots/browse.png" width="800" alt="Browse open tutoring slots">
+</p>
+
+The **How it works** page runs the concurrency test live. Without synchronization all 8 threads book the same slot; with it, exactly one does:
+
+<p align="center">
+  <img src="docs/screenshots/how-it-works.png" width="800" alt="Live concurrency race">
+</p>
+
+---
+
 ## System Architecture
 
 ```mermaid
@@ -159,9 +175,14 @@ Locks are always taken in the order service → ledger, and the ledger never cal
 │   ├── exception/                 # Custom checked exceptions
 │   ├── persistence/
 │   │   └── DataStore.java         # Serialization + CSV/text exports
-│   └── ui/
-│       ├── ConsoleApp.java        # Menu (no business logic)
-│       └── Input.java             # Validated console input
+│   ├── ui/
+│   │   ├── ConsoleApp.java        # Menu (no business logic)
+│   │   └── Input.java             # Validated console input
+│   └── web/
+│       ├── WebServer.java         # JSON API + static files on the JDK HttpServer
+│       ├── RaceDemo.java          # Concurrency race for the web page
+│       └── Json.java              # Minimal JSON writer
+├── web/                           # Front end: index.html, styles.css, app.js
 ├── data/                          # Created at runtime (saved state and reports)
 ├── out/                           # Compiled classes
 └── README.md
@@ -199,6 +220,16 @@ java -cp out skillexchange.Main --reset
 ```bash
 java -cp out skillexchange.ConcurrencyDemo
 ```
+
+### 5. Run the Web App
+```bash
+java -cp out skillexchange.web.WebServer            # then open http://localhost:8080
+java -cp out skillexchange.web.WebServer --reset    # start fresh with demo data
+java -cp out skillexchange.web.WebServer 9090       # use another port
+```
+Run it from the project root so it can find the `web/` folder. The web app and the console app share the same `data/` folder, so run one at a time.
+
+The web front end is built on the JDK's own `com.sun.net.httpserver`, so it still needs no frameworks or libraries. It has screens to browse and book slots, manage your bookings, create listings and time slots, and view your credit history. The **How it works** page runs the concurrency race live in the browser.
 
 ---
 

@@ -23,19 +23,24 @@ public class Main {
 
         BookingService service;
         try {
-            service = store.loadOrCreate();
+            service = loadOrSeed(store);
         } catch (PersistenceException e) {
             System.out.println("ERROR: " + e.getMessage());
             System.out.println("Run with --reset to start fresh (this deletes saved data).");
             return;
         }
 
+        new ConsoleApp(service, store, new Scanner(System.in)).run();
+    }
+
+    /** Loads saved data, or seeds the demo data when there are no students yet. Shared with the web server. */
+    public static BookingService loadOrSeed(DataStore store) throws Exception {
+        BookingService service = store.loadOrCreate();
         if (service.getAllStudents().isEmpty()) {
             DemoData.seed(service);
             store.save(service);
             System.out.println("First run: demo data loaded. Log in as S1-S4, or register.");
         }
-
-        new ConsoleApp(service, store, new Scanner(System.in)).run();
+        return service;
     }
 }

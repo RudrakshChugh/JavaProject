@@ -122,6 +122,15 @@ public class BookingService implements Serializable {
         return candidate;
     }
 
+    /** Like addSlot(listingId, start), but only the listing's own tutor may add a slot to it. */
+    public synchronized TimeSlot addSlot(Student tutor, String listingId, LocalDateTime start) throws BookingException {
+        Listing listing = listings.get(listingId);
+        if (listing == null) throw new IllegalArgumentException("No such listing: " + listingId);
+        if (!listing.getTutor().equals(tutor))
+            throw new BookingException("Only the tutor who owns listing " + listingId + " can add slots to it");
+        return addSlot(listingId, start);
+    }
+
     /** Open slots, soonest first. */
     public synchronized List<TimeSlot> getAvailableSlots() {
         List<TimeSlot> open = new ArrayList<>();
