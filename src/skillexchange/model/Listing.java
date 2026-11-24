@@ -17,11 +17,12 @@ public abstract class Listing implements Serializable {
 
     protected Listing(String id, Student tutor, String skill, String description, int durationMinutes) {
         if (tutor == null) throw new IllegalArgumentException("Tutor is required");
+        if (skill == null || skill.isBlank()) throw new IllegalArgumentException("Skill is required");
         if (durationMinutes <= 0) throw new IllegalArgumentException("Duration must be positive");
         this.id = id;
         this.tutor = tutor;
         this.skill = skill;
-        this.description = description;
+        this.description = description == null ? "" : description;
         this.durationMinutes = durationMinutes;
     }
 

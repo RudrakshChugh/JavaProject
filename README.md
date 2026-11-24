@@ -32,16 +32,28 @@ Each listing is one of three types:
 
 ## Screenshots
 
-The web front end, served by the JDK's built-in HTTP server:
+The web front end, served by the JDK's built-in HTTP server. The home page updates itself: the numbers, the recent-bookings line, the countdown to your next session and the open sessions all change as other students book and publish, without a reload:
 
 <p align="center">
-  <img src="docs/screenshots/browse.png" width="800" alt="Browse open tutoring slots">
+  <img src="docs/screenshots/browse.png" width="800" alt="Browse open tutoring sessions">
+</p>
+
+The **Credits** page shows the escrow ledger: the available balance, the credits currently held for unconfirmed sessions, and every movement with the booking it belongs to:
+
+<p align="center">
+  <img src="docs/screenshots/credits.png" width="800" alt="Credit balance, escrow and history">
 </p>
 
 The **How it works** page runs the concurrency test live. Without synchronization all 8 threads book the same slot; with it, exactly one does:
 
 <p align="center">
   <img src="docs/screenshots/how-it-works.png" width="800" alt="Live concurrency race">
+</p>
+
+There is a dark theme too, switched from the top bar:
+
+<p align="center">
+  <img src="docs/screenshots/browse-dark.png" width="800" alt="The home page in the dark theme">
 </p>
 
 ---
@@ -113,13 +125,18 @@ The service enforces every rule, and each violation throws a specific exception:
 | Rule | Exception |
 |---|---|
 | A slot can only be booked once | `SlotAlreadyBookedException` |
+| A slot that has already started cannot be booked | `BookingException` |
 | You cannot book your own session | `BookingConflictException` |
 | A learner cannot attend two sessions at the same time | `BookingConflictException` |
 | A learner cannot book a session while they are teaching | `BookingConflictException` |
+| A session cannot be booked while its tutor is attending another session at that time | `BookingConflictException` |
 | A tutor's slots cannot overlap | `BookingConflictException` |
 | A swap booking needs enough credits | `InsufficientCreditsException` |
 | Only the learner or the tutor can cancel a booking | `BookingException` |
 | Only the learner can confirm a session (this pays the tutor) | `BookingException` |
+| A session can only be confirmed once it has started | `BookingException` |
+| Only its own tutor can remove a slot, and only while nobody has booked it | `BookingException`, `SlotAlreadyBookedException` |
+| A listing cannot be deleted while it has a confirmed booking | `BookingException` |
 
 Every check runs **before** any state changes, so a failed booking leaves nothing half-done.
 
@@ -193,7 +210,7 @@ Locks are always taken in the order service → ledger, and the ledger never cal
 ## Quick Start
 
 ### 1. Requirements
-- JDK 17 or newer (the code uses switch expressions, `instanceof` patterns and `Stream.toList()`). It was developed and tested only on **Java 26**.
+- JDK 17 or newer (the code uses switch expressions, `instanceof` patterns and `Stream.toList()`). It was developed on **Java 26** and has also been built and run on **Java 21**.
 - No build tool or external libraries
 
 ### 2. Compile
@@ -209,7 +226,7 @@ javac -d out $(find src -name "*.java")
 ```bash
 java -cp out skillexchange.Main
 ```
-On the first run, demo data is loaded. Log in as **S1 to S4** (Asha, Ravi, Meera, Kabir) or register a new student. New students start with **5 credits**.
+On the first run, demo data is loaded. Log in as **S1 to S4** (Asha, Ravi, Meera, Kabir) with the demo password `demo123`, or register a new student with a password of your own. New students start with **5 credits**.
 
 To delete saved data and start fresh:
 ```bash
@@ -231,6 +248,38 @@ Run it from the project root so it can find the `web/` folder. The web app and t
 
 The web front end is built on the JDK's own `com.sun.net.httpserver`, so it still needs no frameworks or libraries. It has screens to browse and book slots, manage your bookings, create listings and time slots, and view your credit history. The **How it works** page runs the concurrency race live in the browser.
 
+- **A playful look in light and dark.** Grape purple leads, with sunshine yellow, mint, pink and sky as supporting colours. Every colour is a CSS variable at the top of `web/styles.css`, so the palette can be changed in one place. The first visit follows the system's light or dark setting, and the toggle in the top bar remembers your choice.
+- **Live updates.** The page asks the server for changes every 6 seconds. When another student books your session, confirms it, cancels, or publishes a new slot, you see a notice and the page updates in place. Open the app in two browser windows with two profiles to watch it.
+- **Explore.** Skill tiles filter the sessions with one click, tutor names open a profile with everything that person teaches, and **Surprise me** picks a random session you could book.
+- **Search palette.** Press `Ctrl+K` (`⌘K` on a Mac) or `/` to jump to any page, skill, person or action.
+- Each screen has its own address (`#/browse`, `#/bookings`, `#/teach`, `#/credits`, `#/how`), so the back button and page refresh work.
+- Cancelling a booking and confirming a session both ask first and say what will happen to the held credits.
+- The layout adapts to phone-sized screens, and all motion is switched off for visitors whose system asks for reduced motion.
+
+Everything on screen comes from the API. The moving dots in the concurrency race are the one illustration: the result in each lane is the real outcome, but the speed of each dot is only for show.
+
+The API checks every request itself rather than trusting the form: field lengths, number ranges (a fee of `NaN` or `Infinity` is refused), email format, how far ahead a slot may be (one year), and that the request comes from the app's own page and not from another site.
+
+### Signing in
+
+Every student has a password. The server never stores it: `model/Passwords.java` turns it into a salted PBKDF2 hash using only classes from the JDK, and that hash is what gets saved.
+
+- `POST /api/login` checks the password and answers with a random session token in a cookie (`HttpOnly`, `SameSite=Strict`).
+- Every request that acts for a student (booking, cancelling, confirming, teaching) takes the student from that session, never from a parameter, so one student cannot act as another.
+- A student's bookings, credit balance and history are sent only to that student. Everyone else sees a name, what they teach and their open times.
+- Five wrong passwords in a row pause sign-in for that profile for 30 seconds.
+- Sessions live in memory, so restarting the server signs everyone out.
+
+This is sign-in for a learning project. It runs over plain HTTP on localhost; putting it on the internet would need HTTPS in front of it.
+
+### Trying the whole flow in a demo
+
+A session can only be confirmed once it has started, so to show "confirm, and the tutor is paid" live:
+
+1. Sign in as a tutor and add a time slot one or two minutes from now.
+2. In a second browser window, sign in as another student and book it.
+3. When the countdown on **My bookings** reaches the start time, the **Confirm it took place** button appears by itself.
+
 ---
 
 ## Using the App
@@ -247,6 +296,8 @@ The web front end is built on the JDK's own `com.sun.net.httpserver`, so it stil
  8. Add a time slot to my listing
  9. My listings and slots
 10. Credit balance and history
+11. Remove a time slot
+12. Delete a listing
  0. Log out
 ```
 

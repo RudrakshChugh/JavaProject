@@ -2,7 +2,8 @@ package skillexchange.model;
 
 /**
  * A session paid for with skill-exchange credits.
- * The learner loses credits and the tutor gains them (the ledger comes in a later step).
+ * The learner's credits are held when they book and reach the tutor once the session is confirmed
+ * (see CreditLedger).
  */
 public class CreditSwapListing extends Listing {
     private static final long serialVersionUID = 1L;

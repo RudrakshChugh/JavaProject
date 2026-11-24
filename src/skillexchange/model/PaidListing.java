@@ -9,7 +9,8 @@ public class PaidListing extends Listing {
     public PaidListing(String id, Student tutor, String skill, String description,
                        int durationMinutes, double fee) {
         super(id, tutor, skill, description, durationMinutes);
-        if (fee <= 0) throw new IllegalArgumentException("Fee must be positive");
+        // "!(fee > 0)" also rejects NaN, which "fee <= 0" lets through.
+        if (!(fee > 0) || Double.isInfinite(fee)) throw new IllegalArgumentException("Fee must be a positive amount");
         this.fee = fee;
     }
 

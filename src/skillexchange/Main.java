@@ -39,7 +39,8 @@ public class Main {
         if (service.getAllStudents().isEmpty()) {
             DemoData.seed(service);
             store.save(service);
-            System.out.println("First run: demo data loaded. Log in as S1-S4, or register.");
+            System.out.println("First run: demo data loaded. Log in as S1-S4 (password: "
+                    + DemoData.DEMO_PASSWORD + "), or register.");
         }
         return service;
     }

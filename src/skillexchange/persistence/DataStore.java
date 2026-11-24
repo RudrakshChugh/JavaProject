@@ -132,7 +132,7 @@ public class DataStore {
 
     /** Wraps a value in quotes if it contains a comma, quote or newline (standard CSV escaping). */
     private static String csv(String value) {
-        if (value.contains(",") || value.contains("\"") || value.contains("\n")) {
+        if (value.contains(",") || value.contains("\"") || value.contains("\n") || value.contains("\r")) {
             return "\"" + value.replace("\"", "\"\"") + "\"";
         }
         return value;

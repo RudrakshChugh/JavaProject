@@ -3,11 +3,17 @@ package skillexchange.ui;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.time.format.ResolverStyle;
 import java.util.Scanner;
 
 /** Reads and validates console input, re-prompting until the value is valid. */
 class Input {
     static final DateTimeFormatter DATE_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+    // For reading: STRICT refuses dates that do not exist. The default would quietly turn
+    // "2027-02-31" into 28 February. ("uuuu" is the year pattern that STRICT mode needs.)
+    private static final DateTimeFormatter STRICT_DATE_TIME =
+            DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm").withResolverStyle(ResolverStyle.STRICT);
+    private static final int MAX_DAYS_AHEAD = 365;
 
     /** Thrown when stdin closes (Ctrl+Z / Ctrl+D or end of piped input). */
     static class EndOfInputException extends RuntimeException {
@@ -53,7 +59,7 @@ class Input {
             String s = line(prompt);
             try {
                 double d = Double.parseDouble(s);
-                if (d > 0) return d;
+                if (d > 0 && !Double.isInfinite(d)) return d;
             } catch (NumberFormatException ignored) { }
             System.out.println("  Enter a number greater than 0.");
         }
@@ -63,13 +69,30 @@ class Input {
         while (true) {
             String s = line(prompt);
             try {
-                LocalDateTime t = LocalDateTime.parse(s, DATE_TIME);
-                if (t.isAfter(LocalDateTime.now())) return t;
-                System.out.println("  That time is in the past.");
+                LocalDateTime t = LocalDateTime.parse(s, STRICT_DATE_TIME);
+                LocalDateTime now = LocalDateTime.now();
+                if (!t.isAfter(now)) System.out.println("  That time is in the past.");
+                else if (t.isAfter(now.plusDays(MAX_DAYS_AHEAD)))
+                    System.out.println("  Pick a time within the next " + MAX_DAYS_AHEAD + " days.");
+                else return t;
             } catch (DateTimeParseException e) {
-                System.out.println("  Use the format yyyy-MM-dd HH:mm, e.g. 2026-11-05 14:30");
+                System.out.println("  Enter a real date as yyyy-MM-dd HH:mm, e.g. 2026-11-05 14:30");
             }
         }
+    }
+
+    /**
+     * Reads a password. In a real terminal the typing is hidden; when input is piped in
+     * (or inside an IDE, where there is no console) it is read as an ordinary line.
+     */
+    char[] password(String prompt) {
+        java.io.Console console = System.console();
+        if (console != null) {
+            char[] typed = console.readPassword(prompt);
+            if (typed == null) throw new EndOfInputException();
+            return typed;
+        }
+        return line(prompt).toCharArray();
     }
 
     boolean yesNo(String prompt) {

@@ -20,12 +20,12 @@ public class CreditTransaction implements Serializable {
     private final String bookingId;   // null for INITIAL
     private final LocalDateTime timestamp;
 
-    public CreditTransaction(Student student, Type type, int amount, String bookingId) {
+    public CreditTransaction(Student student, Type type, int amount, String bookingId, LocalDateTime timestamp) {
         this.student = student;
         this.type = type;
         this.amount = amount;
         this.bookingId = bookingId;
-        this.timestamp = LocalDateTime.now();
+        this.timestamp = timestamp;
     }
 
     public Student getStudent() { return student; }

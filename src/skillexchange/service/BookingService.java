@@ -4,8 +4,10 @@ import skillexchange.exception.*;
 import skillexchange.model.*;
 
 import java.io.IOException;
+import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.*;
 
@@ -35,6 +37,21 @@ public class BookingService implements Serializable {
 
     private int nextSlotNo = 1;
     private int nextBookingNo = 1;
+    private int nextListingNo = 1;   // never goes down, so a deleted listing's id is not handed out again
+
+    // Every rule that depends on the time ("has this slot started?") asks this clock, never the system
+    // directly. Normally it is the real clock; DemoData and tests can swap it to build history in the past.
+    // Not serializable and not part of the saved state, so it is transient and restored in readObject.
+    private transient Clock clock = Clock.systemDefaultZone();
+
+    /** Replaces the clock the rules use. Meant for tests and for seeding demo history. */
+    public synchronized void setClock(Clock clock) {
+        this.clock = Objects.requireNonNull(clock);
+    }
+
+    private LocalDateTime now() {
+        return LocalDateTime.now(clock);
+    }
 
     // ---------- Students ----------
 
@@ -42,7 +59,7 @@ public class BookingService implements Serializable {
         if (students.containsKey(student.getId()))
             throw new IllegalArgumentException("Student id already exists: " + student.getId());
         students.put(student.getId(), student);
-        ledger.openAccount(student, initialCredits);
+        ledger.openAccount(student, initialCredits, now());
     }
 
     /** The ledger is thread-safe on its own; the field is final, so no lock is needed here. */
@@ -61,10 +78,19 @@ public class BookingService implements Serializable {
         return students.get(id);
     }
 
+    /** Returns null if there is no such booking. */
+    public synchronized Booking findBooking(String id) {
+        return bookings.get(id);
+    }
+
     /** Next unused id such as "S4". Gaps left by hand-picked ids are skipped. */
     public synchronized String nextStudentId() { return nextFreeId("S", students); }
 
-    public synchronized String nextListingId() { return nextFreeId("L", listings); }
+    public synchronized String nextListingId() {
+        int n = Math.max(nextListingNo, listings.size() + 1);
+        while (listings.containsKey("L" + n)) n++;
+        return "L" + n;
+    }
 
     private static String nextFreeId(String prefix, Map<String, ?> map) {
         int n = map.size() + 1;
@@ -79,6 +105,28 @@ public class BookingService implements Serializable {
         if (listings.containsKey(listing.getId()))
             throw new IllegalArgumentException("Listing id already exists: " + listing.getId());
         listings.put(listing.getId(), listing);
+        // Remember the highest number used, so a later listing never reuses the id of a deleted one.
+        if (listing.getId().matches("L\\d{1,8}"))
+            nextListingNo = Math.max(nextListingNo, Integer.parseInt(listing.getId().substring(1)) + 1);
+    }
+
+    /**
+     * Deletes a listing together with its time slots. Only its own tutor may do this, and not while a
+     * learner still has a confirmed booking on one of its slots. Past bookings keep their own reference
+     * to the listing, so the session history and the ledger are unaffected.
+     */
+    public synchronized void removeListing(Student tutor, String listingId) throws BookingException {
+        Listing listing = listings.get(listingId);
+        if (listing == null) throw new IllegalArgumentException("No such listing: " + listingId);
+        if (!listing.getTutor().equals(tutor))
+            throw new BookingException("Only the tutor who owns listing " + listingId + " can delete it");
+        for (Booking b : bookings.values()) {
+            if (b.getStatus() == BookingStatus.CONFIRMED && b.getSlot().getListing().getId().equals(listingId))
+                throw new BookingException("Listing " + listingId + " still has a confirmed booking ("
+                        + b.getId() + "). Cancel it first.");
+        }
+        slots.values().removeIf(s -> s.getListing().getId().equals(listingId));
+        listings.remove(listingId);
     }
 
     public synchronized List<Listing> getAllListings() {
@@ -131,6 +179,20 @@ public class BookingService implements Serializable {
         return addSlot(listingId, start);
     }
 
+    /**
+     * Takes back a time slot that nobody has booked. Only the tutor who published it may do this.
+     * A booked slot cannot be removed: the booking has to be cancelled first, which refunds the learner.
+     */
+    public synchronized void removeSlot(Student tutor, String slotId) throws BookingException {
+        TimeSlot slot = slots.get(slotId);
+        if (slot == null) throw new IllegalArgumentException("No such slot: " + slotId);
+        if (!slot.getTutor().equals(tutor))
+            throw new BookingException("Only the tutor who published slot " + slotId + " can remove it");
+        if (slot.isBooked())
+            throw new SlotAlreadyBookedException(slotId);
+        slots.remove(slotId);
+    }
+
     /** Open slots, soonest first. */
     public synchronized List<TimeSlot> getAvailableSlots() {
         List<TimeSlot> open = new ArrayList<>();
@@ -139,6 +201,22 @@ public class BookingService implements Serializable {
         }
         open.sort(Comparator.comparing(TimeSlot::getStart));
         return open;
+    }
+
+    /**
+     * Open slots a learner can still book, soonest first: they have not started yet,
+     * and their tutor is not attending someone else's session at that time.
+     */
+    public synchronized List<TimeSlot> getUpcomingAvailableSlots() {
+        LocalDateTime now = now();
+        List<TimeSlot> upcoming = getAvailableSlots();
+        upcoming.removeIf(s -> !s.getStart().isAfter(now) || tutorClash(s) != null);
+        return upcoming;
+    }
+
+    /** True if the slot's tutor has booked someone else's session that overlaps it, so the tutor cannot teach it. */
+    public synchronized boolean isTutorBusy(TimeSlot slot) {
+        return tutorClash(slot) != null;
     }
 
     // ---------- Bookings ----------
@@ -156,15 +234,19 @@ public class BookingService implements Serializable {
             throw new BookingConflictException("You cannot book your own session");
         if (slot.isBooked())
             throw new SlotAlreadyBookedException(slotId);
+        if (!slot.getStart().isAfter(now()))
+            throw new BookingException("Slot " + slotId + " has already started and can no longer be booked");
         checkLearnerIsFree(learner, slot);
+        if (tutorClash(slot) != null)
+            throw new BookingConflictException(slot.getTutor().getName() + " is attending another session at that time");
 
         String bookingId = "B" + nextBookingNo;
         int cost = slot.getListing().getCreditCost();   // polymorphic: 0 for paid and free listings
-        if (cost > 0) ledger.hold(learner, cost, bookingId);  // throws if not enough credits
+        if (cost > 0) ledger.hold(learner, cost, bookingId, now());  // throws if not enough credits
 
         nextBookingNo++;
         slot.markBooked();
-        Booking booking = new Booking(bookingId, learner, slot);
+        Booking booking = new Booking(bookingId, learner, slot, now());
         bookings.put(bookingId, booking);
         return booking;
     }
@@ -179,19 +261,22 @@ public class BookingService implements Serializable {
             throw new BookingException("Only the learner or the tutor can cancel booking " + bookingId);
         b.setStatus(BookingStatus.CANCELLED);
         b.getSlot().markAvailable();
-        ledger.refund(bookingId, b.getLearner());
+        ledger.refund(bookingId, b.getLearner(), now());
     }
 
     /**
      * The learner confirms that the session took place, which releases the held credits to the tutor.
-     * Only the learner can do this, because they are the one paying.
+     * Only the learner can do this, because they are the one paying, and only once the session has
+     * started: a session that has not begun cannot have taken place.
      */
     public synchronized void completeSession(Student actor, String bookingId) throws BookingException {
         Booking b = requireConfirmed(bookingId);
         if (!b.getLearner().equals(actor))
             throw new BookingException("Only the learner can confirm booking " + bookingId);
+        if (now().isBefore(b.getSlot().getStart()))
+            throw new BookingException("Booking " + bookingId + " cannot be confirmed before the session starts");
         b.setStatus(BookingStatus.COMPLETED);
-        ledger.release(bookingId, b.getSlot().getTutor());
+        ledger.release(bookingId, b.getSlot().getTutor(), now());
     }
 
     /** Bookings where the student is either the learner or the tutor. */
@@ -201,6 +286,20 @@ public class BookingService implements Serializable {
             if (b.getLearner().equals(student) || b.getSlot().getTutor().equals(student)) result.add(b);
         }
         return result;
+    }
+
+    /**
+     * Credits currently held in escrow for the learner's confirmed swap bookings.
+     * A hold exists exactly while a swap booking is CONFIRMED: completing releases it and cancelling refunds it.
+     */
+    public synchronized int getHeldCredits(Student learner) {
+        int held = 0;
+        for (Booking b : bookings.values()) {
+            if (b.getStatus() == BookingStatus.CONFIRMED && b.getLearner().equals(learner)) {
+                held += b.getSlot().getListing().getCreditCost();
+            }
+        }
+        return held;
     }
 
     public synchronized List<TimeSlot> getSlotsForTutor(Student tutor) {
@@ -217,6 +316,13 @@ public class BookingService implements Serializable {
     /** Holds the lock while saving, so a snapshot can't capture a half-finished booking. */
     private synchronized void writeObject(ObjectOutputStream out) throws IOException {
         out.defaultWriteObject();
+    }
+
+    /** The clock is not saved, so a loaded service gets the real one back. */
+    private void readObject(ObjectInputStream in) throws IOException, ClassNotFoundException {
+        in.defaultReadObject();
+        clock = Clock.systemDefaultZone();
+        if (nextListingNo < 1) nextListingNo = 1;   // data saved before this counter existed
     }
 
     // ---------- Helpers (always called with the lock held) ----------
@@ -237,6 +343,21 @@ public class BookingService implements Serializable {
                         + " is teaching slot " + s.getId() + " at that time");
             }
         }
+    }
+
+    /**
+     * The other side of checkLearnerIsFree: the confirmed booking, if any, in which this slot's tutor is the
+     * learner at an overlapping time. Without this check a student who books a session over one of their own
+     * open slots could later have that slot booked too, and be expected in two places at once.
+     */
+    private Booking tutorClash(TimeSlot slot) {
+        Student tutor = slot.getTutor();
+        for (Booking b : bookings.values()) {
+            if (b.getStatus() == BookingStatus.CONFIRMED && b.getLearner().equals(tutor) && b.getSlot().overlaps(slot)) {
+                return b;
+            }
+        }
+        return null;
     }
 
     private Booking requireConfirmed(String bookingId) throws BookingException {

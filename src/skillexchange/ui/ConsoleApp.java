@@ -81,8 +81,10 @@ public class ConsoleApp {
         System.out.println(" 8. Add a time slot to my listing");
         System.out.println(" 9. My listings and slots");
         System.out.println("10. Credit balance and history");
+        System.out.println("11. Remove a time slot");
+        System.out.println("12. Delete a listing");
         System.out.println(" 0. Log out");
-        switch (in.intInRange("> ", 0, 10)) {
+        switch (in.intInRange("> ", 0, 12)) {
             case 1 -> browseOpenSlots();
             case 2 -> search();
             case 3 -> book();
@@ -93,6 +95,8 @@ public class ConsoleApp {
             case 8 -> addSlot();
             case 9 -> myListings();
             case 10 -> creditHistory();
+            case 11 -> removeSlot();
+            case 12 -> deleteListing();
             case 0 -> { System.out.println("Logged out."); current = null; }
         }
         return true;
@@ -107,6 +111,11 @@ public class ConsoleApp {
         String id = in.required("Student id: ").toUpperCase();
         Student s = service.findStudent(id);
         if (s == null) { System.out.println("No student with id " + id); return; }
+        if (!s.hasPassword()) {
+            System.out.println("This profile was saved before passwords existed. Run with --reset to start fresh.");
+            return;
+        }
+        if (!s.checkPassword(in.password("Password: "))) { System.out.println("Wrong password."); return; }
         current = s;
         System.out.println("Welcome, " + s.getName() + "!");
     }
@@ -114,7 +123,16 @@ public class ConsoleApp {
     private void register() {
         String name = in.required("Name: ");
         String email = in.line("Email (optional): ");
-        Student s = new Student(service.nextStudentId(), name, email.isEmpty() ? null : email);
+        Student s;
+        while (true) {
+            char[] password = in.password("Choose a password (" + Student.MIN_PASSWORD_LENGTH + " characters or more): ");
+            try {
+                s = new Student(service.nextStudentId(), name, email.isEmpty() ? null : email, password);
+                break;
+            } catch (IllegalArgumentException e) {
+                System.out.println("  " + e.getMessage());
+            }
+        }
         service.registerStudent(s, STARTING_CREDITS);
         save();
         current = s;
@@ -123,7 +141,7 @@ public class ConsoleApp {
     }
 
     private void browseOpenSlots() {
-        List<TimeSlot> open = service.getAvailableSlots();
+        List<TimeSlot> open = service.getUpcomingAvailableSlots();   // slots that already started can't be booked
         if (open.isEmpty()) { System.out.println("No open slots right now."); return; }
         System.out.println("Open slots:");
         open.forEach(s -> System.out.println("  " + s));
@@ -249,6 +267,45 @@ public class ConsoleApp {
         slots.forEach(s -> System.out.println("  " + s));
     }
 
+    private void removeSlot() {
+        List<TimeSlot> open = service.getSlotsForTutor(current).stream().filter(s -> !s.isBooked()).toList();
+        if (open.isEmpty()) { System.out.println("You have no open slots to remove."); return; }
+        open.forEach(s -> System.out.println("  " + s));
+        String id = in.line("Slot id to remove (blank to go back): ").toUpperCase();
+        if (id.isEmpty()) return;
+        if (open.stream().noneMatch(s -> s.getId().equals(id))) {
+            System.out.println("Not one of the slots listed: " + id);
+            return;
+        }
+        try {
+            service.removeSlot(current, id);
+            save();
+            System.out.println("Slot " + id + " removed.");
+        } catch (BookingException e) {
+            System.out.println("Could not remove slot: " + e.getMessage());
+        }
+    }
+
+    private void deleteListing() {
+        List<Listing> mine = service.getListingsByTutor(current);
+        if (mine.isEmpty()) { System.out.println("You have no listings."); return; }
+        mine.forEach(l -> System.out.println("  " + l));
+        String id = in.line("Listing id to delete (blank to go back): ").toUpperCase();
+        if (id.isEmpty()) return;
+        if (mine.stream().noneMatch(l -> l.getId().equals(id))) {
+            System.out.println("You have no listing with id " + id);
+            return;
+        }
+        if (!in.yesNo("Delete listing " + id + " and all its time slots?")) return;
+        try {
+            service.removeListing(current, id);
+            save();
+            System.out.println("Listing " + id + " deleted.");
+        } catch (BookingException e) {
+            System.out.println("Could not delete listing: " + e.getMessage());
+        }
+    }
+
     private void creditHistory() {
         System.out.println("Balance: " + ledger.getBalance(current) + " credits");
         for (CreditTransaction tx : ledger.getHistory(current)) {
@@ -259,7 +316,7 @@ public class ConsoleApp {
     // ---------- Helpers ----------
 
     private TimeSlot findOpenSlot(String slotId) {
-        for (TimeSlot s : service.getAvailableSlots()) {
+        for (TimeSlot s : service.getUpcomingAvailableSlots()) {
             if (s.getId().equals(slotId)) return s;
         }
         return null;

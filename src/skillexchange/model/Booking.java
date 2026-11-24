@@ -13,12 +13,12 @@ public class Booking implements Serializable {
     private final LocalDateTime bookedAt;
     private volatile BookingStatus status;
 
-    public Booking(String id, Student learner, TimeSlot slot) {
+    public Booking(String id, Student learner, TimeSlot slot, LocalDateTime bookedAt) {
         if (learner == null || slot == null) throw new IllegalArgumentException("Learner and slot are required");
         this.id = id;
         this.learner = learner;
         this.slot = slot;
-        this.bookedAt = LocalDateTime.now();
+        this.bookedAt = bookedAt;
         this.status = BookingStatus.CONFIRMED;
     }
 
