@@ -35,7 +35,7 @@ Each listing is one of three types:
 The web front end, served by the JDK's built-in HTTP server. The home page updates itself: the numbers, the recent-bookings line, the countdown to your next session and the open sessions all change as other students book and publish, without a reload:
 
 <p align="center">
-  <img src="docs/screenshots/browse.png" width="800" alt="Browse open tutoring sessions">
+  <img src="docs/screenshots/home.png" width="800" alt="Browse open tutoring sessions">
 </p>
 
 The **Credits** page shows the escrow ledger: the available balance, the credits currently held for unconfirmed sessions, and every movement with the booking it belongs to:
@@ -47,13 +47,7 @@ The **Credits** page shows the escrow ledger: the available balance, the credits
 The **How it works** page runs the concurrency test live. Without synchronization all 8 threads book the same slot; with it, exactly one does:
 
 <p align="center">
-  <img src="docs/screenshots/how-it-works.png" width="800" alt="Live concurrency race">
-</p>
-
-There is a dark theme too, switched from the top bar:
-
-<p align="center">
-  <img src="docs/screenshots/browse-dark.png" width="800" alt="The home page in the dark theme">
+  <img src="docs/screenshots/concurrency-race.png" width="800" alt="Live concurrency race">
 </p>
 
 ---
