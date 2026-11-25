@@ -41,6 +41,7 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 
 /** Teach: create a listing, then add the times you are free and exercises for your learners. */
 final class TeachView implements View {
@@ -90,7 +91,13 @@ final class TeachView implements View {
 
     @Override
     public void refresh() {
-        ctx.call(() -> new Loaded(ctx.api().myListings(), ctx.api().mySlots(), ctx.api().myModules()), this::paint);
+        ctx.call(() -> {
+            // Started together, collected afterwards: the three requests run at the same time.
+            CompletableFuture<List<Listing>> listings = Ui.start(() -> ctx.api().myListings());
+            CompletableFuture<List<TimeSlot>> slots = Ui.start(() -> ctx.api().mySlots());
+            CompletableFuture<List<LearningModule>> modules = Ui.start(() -> ctx.api().myModules());
+            return new Loaded(Ui.await(listings), Ui.await(slots), Ui.await(modules));
+        }, this::paint);
     }
 
     private void paint(Loaded data) {

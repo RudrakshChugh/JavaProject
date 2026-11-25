@@ -35,6 +35,8 @@ import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.function.Consumer;
@@ -82,6 +84,33 @@ final class Ui {
         task.setOnSucceeded(e -> onDone.accept(task.getValue()));
         task.setOnFailed(e -> onError.accept(task.getException()));
         WORKERS.execute(task);
+    }
+
+    /**
+     * Starts work on a background thread straight away and returns a handle to its future result.
+     * Several of these started together run at the same time, so three questions to the server
+     * take as long as the slowest one, not as long as all three added up.
+     */
+    static <T> CompletableFuture<T> start(Callable<T> work) {
+        CompletableFuture<T> result = new CompletableFuture<>();
+        WORKERS.execute(() -> {
+            try {
+                result.complete(work.call());
+            } catch (Throwable failure) {
+                result.completeExceptionally(failure);
+            }
+        });
+        return result;
+    }
+
+    /** Waits for a result begun with {@link #start}. A failure comes out as the exception the work threw. */
+    static <T> T await(CompletableFuture<T> result) throws Exception {
+        try {
+            return result.get();
+        } catch (ExecutionException wrapped) {
+            if (wrapped.getCause() instanceof Exception cause) throw cause;
+            throw wrapped;
+        }
     }
 
     /** The text to show a user for any exception. */

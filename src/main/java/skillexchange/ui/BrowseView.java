@@ -41,6 +41,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 /**
@@ -146,9 +147,18 @@ final class BrowseView implements View {
 
     @Override
     public void refresh() {
-        ctx.call(() -> new Home(ctx.api().stats(), ctx.api().openSlots("", null), ctx.api().recentActivity(),
-                ctx.signedIn() ? ctx.api().myBookings() : List.of(),
-                ctx.signedIn() ? ctx.api().credits().balance() : 0), this::paint);
+        ctx.call(() -> {
+            // Five questions for the server. They are all started first and collected afterwards,
+            // so they travel at the same time instead of one after another.
+            CompletableFuture<Stats> stats = Ui.start(() -> ctx.api().stats());
+            CompletableFuture<List<TimeSlot>> open = Ui.start(() -> ctx.api().openSlots("", null));
+            CompletableFuture<List<Activity>> recent = Ui.start(() -> ctx.api().recentActivity());
+            CompletableFuture<List<Booking>> mine = ctx.signedIn()
+                    ? Ui.start(() -> ctx.api().myBookings()) : CompletableFuture.completedFuture(List.of());
+            CompletableFuture<Integer> balance = ctx.signedIn()
+                    ? Ui.start(() -> ctx.api().credits().balance()) : CompletableFuture.completedFuture(0);
+            return new Home(Ui.await(stats), Ui.await(open), Ui.await(recent), Ui.await(mine), Ui.await(balance));
+        }, this::paint);
     }
 
     private void paint(Home home) {

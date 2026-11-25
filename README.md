@@ -27,7 +27,7 @@ downloads Maven, JavaFX, the SQLite driver and JUnit).
 | The desktop application | `./run.sh` | `run.bat` |
 | Only the server | `./run.sh server` | `run.bat server` |
 | The concurrency demo in the terminal | `./run.sh demo` | `run.bat demo` |
-| The 54 JUnit tests | `./run.sh test` | `run.bat test` |
+| The 61 JUnit tests | `./run.sh test` | `run.bat test` |
 
 `./run.sh` on its own is enough: if no server is running on this computer, the application starts
 one inside itself. The first run creates `data/skillexchange.db` and loads demo data.
@@ -54,9 +54,8 @@ Without the scripts: `./mvnw javafx:run` (application), `./mvnw compile exec:jav
 
 ## Deploy it
 
-This is a desktop application with a server, not a website, so there is no single link to open.
-Deploying it means two things: run the server on a computer everyone can reach, and give each
-student the application.
+This is a desktop application with a server, not a website. Deploying it means two things: run
+the server on a computer everyone can reach, and give each student the application.
 
 **1. Build one file that holds everything**
 
@@ -66,35 +65,39 @@ student the application.
 
 This creates `target/skill-exchange.jar` (about 23 MB). It needs only Java 17 or newer to run,
 and holds the JavaFX libraries for Windows, Linux and Macs with Apple silicon. On an Intel Mac,
-run from source with `./run.sh` instead.
+run from source with `./run.sh` instead. The same file is both the application and the server.
 
-**2. Start the server** on the computer that will keep the data:
+**2. Choose where the server runs**
 
-```
-java -jar skill-exchange.jar server
-```
-
-It listens on port 5050 and keeps its database, logs and backups in a `data` folder next to it.
-Options: `--port 6000`, `--data folder`, `--reset`.
-
-**3. Start the application** on each student's computer, pointing at the server:
-
-```
-java -jar skill-exchange.jar --host=192.168.1.20
-```
-
-| Where the server runs | What students use as `--host` | Notes |
+| Where | Start the server | Start the application |
 |---|---|---|
-| The same computer (a demo) | nothing: `java -jar skill-exchange.jar` | The application starts its own server if none is running. |
-| A laptop on the same Wi-Fi | that laptop's IP address | Its firewall must allow incoming connections on port 5050. |
-| A computer with a public address, such as a cloud virtual machine | its address | Open TCP port 5050. The connection is not encrypted, so see Limitations. |
+| The same computer (a demo) | nothing to start | `java -jar skill-exchange.jar` (it starts its own server) |
+| A laptop on the same Wi-Fi | `java -jar skill-exchange.jar server` | `java -jar skill-exchange.jar --host=192.168.1.20` (that laptop's address; its firewall must allow port 5050) |
+| On the internet, on Render | Render builds and starts it from this repository | `java -jar skill-exchange.jar --server=https://skill-exchange-85tb.onrender.com` |
 
-The project's earlier web version was hosted on Render. That does not work for this version:
-a Render web service receives HTTP requests, and this server speaks its own protocol over a plain
-TCP socket.
+Server options: `--port 6000`, `--http-port 8080`, `--http-only`, `--data folder`, `--reset`.
 
-Tested: all three commands on one Mac. Not tested: two different computers, and the JAR on
-Windows and Linux.
+**The server on Render**
+
+The `Dockerfile` and `render.yaml` in this repository build the server and run it on
+[Render](https://render.com). Render rebuilds it on every push to `main`. Its address,
+`https://skill-exchange-85tb.onrender.com`, is for the desktop application; a browser only gets a
+line of text saying the server is up.
+
+A web host carries HTTP and nothing else, so the server has two doors. Clients on the same
+network come in through a plain socket. Clients on the internet come in through an HTTP gateway
+(`server/HttpGateway.java`, built on the JDK's own `HttpServer`): each call is one request whose
+body is the same serialized object the socket would carry, and events are fetched by long
+polling. The application code never knows which door it used (`net/RemoteApi.java` is abstract,
+with a socket and an HTTP implementation).
+
+Things to know about the free hosting plan:
+
+- **It sleeps when nobody uses it.** The first connection after a pause can take about a minute;
+  the application shows a "connecting" screen meanwhile.
+- **Its data is not permanent.** There is no permanent disk, so whenever the service restarts
+  the database starts again from the demo data.
+- **The connection is encrypted** on this path, because the host serves HTTPS.
 
 ## What a student can do
 
@@ -143,12 +146,15 @@ drives the real screens with the demo account.
                                             persistence: DAOs, PreparedStatement  -> SQLite file
 ```
 
+Through the web address the path is the same, except that the three frames travel as HTTP
+requests through `server/HttpGateway` instead of down a socket.
+
 | Package | Files | Job |
 |---|---|---|
 | `skillexchange.ui` | 18 | JavaFX pages, dialogs and the stylesheet's building blocks. No business rules. |
 | `skillexchange.api` | 3 | `SkillExchangeApi`, the interface both sides share; `Event`; the `@Open` annotation |
-| `skillexchange.net` | 2 | The wire format (`Frame`) and the client's proxy (`RemoteApi`) |
-| `skillexchange.server` | 5 | Socket server, one handler per client, event hub, admin console |
+| `skillexchange.net` | 5 | The wire format (`Frame`) and the client's proxy (`RemoteApi`), with its socket and HTTP implementations |
+| `skillexchange.server` | 7 | Socket server, HTTP gateway, the dispatcher that runs each call, event hub, admin console |
 | `skillexchange.service` | 9 | Every rule: bookings, credit ledger, accounts, chat, learning, demo data, race demo |
 | `skillexchange.persistence` | 13 | `Database` (transactions) and one Data Access Object per table |
 | `skillexchange.model` | 29 | The things the system is about. All serializable, so they can cross the network. |
@@ -157,7 +163,7 @@ drives the real screens with the demo account.
 | `skillexchange.io` | 3 | Module file reader, CSV writer, serialized backup |
 | `skillexchange.logging` | 2 | `java.util.logging` set-up and a custom formatter |
 
-97 source files, about 8,200 lines, plus 5 test classes.
+102 source files, about 8,800 lines, plus 6 test classes.
 
 ### What stops a slot being booked twice
 
@@ -208,14 +214,14 @@ So a tutor is paid only for sessions that happen, and a refund can never fail.
 | Topic | Where |
 |---|---|
 | Multithreading | `ExecutorService`, `ScheduledExecutorService`, `ReentrantReadWriteLock`, `synchronized`, `volatile`, `CountDownLatch`, `Semaphore`, `AtomicInteger`, `CompletableFuture`, `CopyOnWriteArrayList`; JavaFX `Task` and `Platform.runLater` |
-| Networking | `ServerSocket` and `Socket` (`server/SkillExchangeServer`, `net/RemoteApi`) |
-| Reflection | Dynamic proxy in `net/RemoteApi`; `Method.invoke` in `server/ClientHandler` |
+| Networking | `ServerSocket` and `Socket` (`server/SkillExchangeServer`, `net/SocketRemoteApi`); the JDK's `HttpServer` and `HttpClient` with long polling (`server/HttpGateway`, `net/HttpRemoteApi`) |
+| Reflection | Dynamic proxy in `net/RemoteApi`; `Method.invoke` in `server/Dispatcher` |
 | Custom annotation | `api/Open`, read at run time to decide which methods need sign-in |
 | Records, sealed interfaces | `Frame`, `Event`, `Exercise` and most of `model/` |
 | Lambdas, streams, method references | Throughout, for example `CreditsView.show` and `LearningService.questions` |
-| Security | Passwords stored as salted PBKDF2 hashes (`model/Passwords`); a deserialization filter in `ClientHandler`; SQL only through `PreparedStatement` |
+| Security | Passwords stored as salted PBKDF2 hashes (`model/Passwords`); a deserialization filter in `server/Dispatcher`; SQL only through `PreparedStatement` |
 | Preferences | `java.util.prefs.Preferences` remembers the chosen theme (`ui/App`) |
-| Unit tests | JUnit 5, 54 tests in `src/test/java` |
+| Unit tests | JUnit 5, 61 tests in `src/test/java` |
 
 ## Input validation
 
@@ -259,7 +265,7 @@ receives the questions only, and the server does the marking.
 
 ## Tests
 
-`./run.sh test` runs 54 tests against real SQLite databases in temporary folders:
+`./run.sh test` runs 61 tests against real SQLite databases in temporary folders:
 
 | Test class | What it proves |
 |---|---|
@@ -268,11 +274,13 @@ receives the questions only, and the server does the marking.
 | `LearningAndChatTest` | Marking, best scores, and that a chat is private to its two students |
 | `FilesTest` | The module file parser, CSV escaping, and that a backup keeps shared references but not passwords |
 | `ClientServerTest` | A real server and real socket clients: sign-in is required, exceptions cross the network, chat is pushed, the race has one winner in all 200 repeats |
+| `HttpTransportTest` | The same server through its HTTP gateway: sessions, exceptions, chat by long polling, and a socket client and an HTTP client sharing one server |
 
 ## Limitations
 
 - **No real payment.** A paid listing records a fee; nothing is collected.
-- **The connection is not encrypted.** Client and server talk over plain TCP, so use it on a trusted network. TLS would be the fix.
+- **The socket connection is not encrypted.** On the same network, client and server talk over plain TCP, so use that on a trusted network. Through the web address the host adds HTTPS.
+- **On the free hosting plan the data is not permanent**: the hosted server starts again from the demo data whenever it restarts.
 - **An email address is checked for format and uniqueness, not ownership.** No confirmation mail is sent, and there is no password reset.
 - **One time zone.** Times are the local times of the computer the server runs on.
 - **SQLite allows one writer at a time.** That suits a college-sized system, not a large one.

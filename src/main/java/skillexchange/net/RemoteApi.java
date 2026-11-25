@@ -37,6 +37,9 @@ public abstract class RemoteApi implements InvocationHandler, AutoCloseable {
     // AtomicBoolean: "close once" must be decided by exactly one of the threads that may notice the loss.
     private final AtomicBoolean closed = new AtomicBoolean();
 
+    // The proxy only keeps the reference to this object; it calls nothing until an API method is used,
+    // by which time the subclass is fully built. So handing out "this" here is safe.
+    @SuppressWarnings("this-escape")
     protected RemoteApi() {
         this.proxy = (SkillExchangeApi) Proxy.newProxyInstance(
                 SkillExchangeApi.class.getClassLoader(), new Class<?>[] {SkillExchangeApi.class}, this);
