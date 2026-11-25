@@ -18,7 +18,7 @@ It has one server and two ways to use it, all Java:
 | Web site | The application in a browser. Every page is built by Java on the server; the browser runs no JavaScript. | Server-side rendering in `skillexchange.web` |
 | Desktop client | The same application as a window on your computer, with live updates | JavaFX |
 
-![Home](docs/screenshots/04-home.png)
+![The web site](docs/screenshots/web-01-home.png)
 
 **Demo accounts** (password `demo1234` for all): `asha@uni.edu`, `ravi@uni.edu`, `meera@uni.edu`,
 `kabir@uni.edu`. Or create your own profile on the sign-in page.
@@ -90,7 +90,7 @@ A web host carries HTTP and nothing else, so the server has two doors
 Both the web site and the desktop application have the same pages and the same design (cream
 page, colour blobs, chunky pill buttons, light and dark themes). The web site uses the stylesheet
 of the project's first web version; the desktop application rebuilds that look from JavaFX nodes.
-The screenshots below are of the desktop application.
+The picture at the top of this page is the web site; the screenshots below are of the desktop application.
 
 | Page | What it does |
 |---|---|
@@ -110,6 +110,7 @@ the web site only the chat reloads by itself.
 
 | | |
 |---|---|
+| ![Desktop home](docs/screenshots/04-home.png) | ![Web sign-in](docs/screenshots/web-02-sign-in.png) |
 | ![Open sessions](docs/screenshots/05-open-sessions.png) | ![Booking dialog](docs/screenshots/06-book-dialog.png) |
 | ![Validation](docs/screenshots/03-validation.png) | ![My bookings](docs/screenshots/07-my-bookings.png) |
 | ![Teach](docs/screenshots/08-teach.png) | ![Messages](docs/screenshots/09-messages.png) |
@@ -117,8 +118,9 @@ the web site only the chat reloads by itself.
 | ![Credits](docs/screenshots/13-credits.png) | ![Race](docs/screenshots/15-race-result.png) |
 | ![Visitor](docs/screenshots/01-home-visitor.png) | ![Dark theme](docs/screenshots/16-home-dark.png) |
 
-The pictures are taken by the application itself (`./run.sh app --shots=docs/screenshots`), which
-drives the real screens with the demo account.
+The desktop pictures are taken by the application itself (`./run.sh app --shots=docs/screenshots`),
+which drives the real screens with the demo account. The `web-` pictures were taken from the live
+site with a browser.
 
 ## How it is built
 
