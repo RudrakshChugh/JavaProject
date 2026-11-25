@@ -1,0 +1,9 @@
+# Render "Blueprint": tells Render how to build and run the server from the Dockerfile.
+# The service answers HTTP only. The desktop application connects to it with
+#   java -jar skill-exchange.jar --server=https://<name>.onrender.com
+services:
+  - type: web
+    name: skill-exchange
+    runtime: docker
+    plan: free
+    healthCheckPath: /

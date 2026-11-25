@@ -25,7 +25,7 @@ import java.util.logging.Logger;
  * Starts the back end: the database, the services and the socket server.
  *
  * <pre>
- * java skillexchange.server.ServerMain [--port 5050] [--data data] [--reset]
+ * java skillexchange.server.ServerMain [--port 5050] [--http-port 8080] [--http-only] [--data data] [--reset]
  * </pre>
  */
 public final class ServerMain {
@@ -35,25 +35,34 @@ public final class ServerMain {
 
     public static void main(String[] args) {
         int port = SkillExchangeServer.DEFAULT_PORT;
+        int httpPort = SkillExchangeServer.NO_PORT;
         Path dataDir = Path.of("data");
         boolean reset = false;
         try {
+            // A hosting service says which port to answer HTTP on through the PORT environment variable.
+            String fromHost = System.getenv("PORT");
+            if (fromHost != null && !fromHost.isBlank()) httpPort = Integer.parseInt(fromHost.trim());
             for (int i = 0; i < args.length; i++) {
                 switch (args[i]) {
                     case "--port" -> port = Integer.parseInt(args[++i]);
+                    case "--http-port" -> httpPort = Integer.parseInt(args[++i]);
+                    case "--http-only" -> port = SkillExchangeServer.NO_PORT;
                     case "--data" -> dataDir = Path.of(args[++i]);
                     case "--reset" -> reset = true;
                     default -> throw new IllegalArgumentException("Unknown option " + args[i]);
                 }
             }
+            if (port == SkillExchangeServer.NO_PORT && httpPort == SkillExchangeServer.NO_PORT)
+                throw new IllegalArgumentException("--http-only needs --http-port or the PORT variable");
         } catch (RuntimeException e) {      // a missing value, a port that is not a number, an unknown option
-            System.err.println("Usage: ServerMain [--port " + SkillExchangeServer.DEFAULT_PORT + "] [--data data] [--reset]");
+            System.err.println("Usage: ServerMain [--port " + SkillExchangeServer.DEFAULT_PORT
+                    + "] [--http-port 8080] [--http-only] [--data data] [--reset]");
             System.exit(2);
         }
 
         LogConfig.init(dataDir.resolve("logs"));
         try {
-            SkillExchangeServer server = boot(dataDir, port, reset);
+            SkillExchangeServer server = boot(dataDir, port, httpPort, reset);
             // Runs when the JVM is asked to stop (Ctrl+C or "quit"): close connections and threads cleanly.
             CountDownLatch stopped = new CountDownLatch(1);
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
@@ -76,6 +85,11 @@ public final class ServerMain {
 
     /** Builds everything and starts listening. Also used by the desktop app to host a server itself. */
     public static SkillExchangeServer boot(Path dataDir, int port, boolean reset) throws Exception {
+        return boot(dataDir, port, SkillExchangeServer.NO_PORT, reset);
+    }
+
+    /** The same, with an HTTP port as well as (or, with NO_PORT for {@code port}, instead of) the socket port. */
+    public static SkillExchangeServer boot(Path dataDir, int port, int httpPort, boolean reset) throws Exception {
         Path dbFile = dataDir.resolve("skillexchange.db");
         if (reset) {
             // SQLite keeps two helper files next to the database while it is in WAL mode.
@@ -88,7 +102,7 @@ public final class ServerMain {
         if (services.accounts().countStudents() == 0) {
             DemoData.seed(services);
         }
-        SkillExchangeServer server = new SkillExchangeServer(services, port);
+        SkillExchangeServer server = new SkillExchangeServer(services, port, httpPort);
         server.start();
         return server;
     }

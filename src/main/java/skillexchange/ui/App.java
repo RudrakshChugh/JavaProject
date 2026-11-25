@@ -17,6 +17,7 @@ import skillexchange.server.ServerMain;
 import skillexchange.server.SkillExchangeServer;
 
 import java.io.IOException;
+import java.net.URI;
 import java.nio.file.Path;
 import java.util.Map;
 import java.util.Set;
@@ -29,7 +30,8 @@ import java.util.prefs.Preferences;
  * The JavaFX desktop client.
  *
  * <pre>
- * App [--host=localhost] [--port=5050] [--data=data]
+ * App [--host=localhost] [--port=5050] [--data=data]      a server reached by socket
+ * App --server=https://example.onrender.com               a server reached through the web
  * </pre>
  *
  * It connects to a Skill Exchange server. If none is running on this computer it starts one
@@ -46,6 +48,7 @@ public final class App extends Application {
 
     private String host;
     private int port;
+    private String serverUrl;           // set with --server=https://...; null means connect by socket
     private Path dataDir;
     private Stage stage;
     private Scene scene;
@@ -76,8 +79,12 @@ public final class App extends Application {
         } catch (NumberFormatException e) {
             port = SkillExchangeServer.DEFAULT_PORT;
         }
+        serverUrl = named.get("server");
         dark = "dark".equals(named.getOrDefault("theme", preferences.get("theme", "light")));
         LogConfig.init(dataDir.resolve("logs"));
+        // A server on the web may be asleep and take a minute to wake. That wait must not happen
+        // here, before there is a window: start() shows a "connecting" screen and connects from there.
+        if (serverUrl != null) return;
         try {
             connect();
         } catch (Exception e) {
@@ -97,6 +104,7 @@ public final class App extends Application {
         scene.getStylesheets().add(STYLESHEET);
         stage.setScene(scene);
         if (startupError != null) showOffline(startupError);
+        else if (connection == null) showConnecting();
         else showMain(null, "browse");
         stage.show();
 
@@ -127,7 +135,9 @@ public final class App extends Application {
     synchronized void connect() throws Exception {
         if (connection != null && !connection.isClosed()) return;
         RemoteApi fresh;
-        try {
+        if (serverUrl != null) {
+            fresh = RemoteApi.connect(URI.create(serverUrl));
+        } else try {
             fresh = RemoteApi.connect(host, port);
         } catch (IOException noServer) {
             if (!LOCAL.contains(host) || embeddedServer != null) throw new IOException(
@@ -154,6 +164,19 @@ public final class App extends Application {
     }
 
     MainView main() { return main; }
+
+    /** Shown while the first connection to a server on the web is being made. */
+    private void showConnecting() {
+        VBox box = new VBox(14, Ui.heading("Skill Exchange", "h1"),
+                Ui.wrapped("Connecting to " + serverUrl + " ...", "muted"),
+                Ui.wrapped("If the server was asleep, waking it can take about a minute.", "subtle", "small"));
+        box.setAlignment(Pos.CENTER);
+        setRoot(box);
+        Ui.async(() -> {
+            connect();
+            return true;
+        }, ok -> showMain(null, "browse"), error -> showOffline(Ui.message(error)));
+    }
 
     /** Shown instead of the application while there is no server to talk to. */
     private void showOffline(String message) {

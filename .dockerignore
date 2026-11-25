@@ -1,0 +1,10 @@
+# Keep the build small: the container needs pom.xml and src/, nothing else.
+.git
+target
+data
+docs
+PPTS
+*.md
+*.docx
+*.pdf
+*.pptx
