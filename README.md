@@ -2,22 +2,43 @@
 
 **UCS553 Enterprise Web Application** · Akshat Kaushik · Rudraksh Chugh
 
+**Live: <https://skill-exchange-85tb.onrender.com>** (open it in a browser; nothing to install)
+
 A booking system for peer tutoring, written entirely in Java. A student lists a skill, publishes
 time slots, and other students book them. A session is **paid**, **free**, or a **credit swap**
 paid with credits earned by teaching. Learner and tutor can **chat** to agree what, how and where,
 and a tutor can attach **exercise modules** that the server marks.
 
-It has three parts, all Java:
+It has one server and two ways to use it, all Java:
 
 | Part | What it is | Main technology |
 |---|---|---|
-| Desktop client | The windows students use | JavaFX |
-| Server (back end) | Enforces every rule, serves many clients at once | Sockets, thread pool, object serialization |
+| Server (back end) | Enforces every rule, serves many clients at once | Sockets, the JDK's HTTP server, a thread pool, object serialization |
 | Database | Where everything is stored | SQLite through JDBC |
+| Web site | The application in a browser. Every page is built by Java on the server; the browser runs no JavaScript. | Server-side rendering in `skillexchange.web` |
+| Desktop client | The same application as a window on your computer, with live updates | JavaFX |
 
 ![Home](docs/screenshots/04-home.png)
 
-## Run it
+**Demo accounts** (password `demo1234` for all): `asha@uni.edu`, `ravi@uni.edu`, `meera@uni.edu`,
+`kabir@uni.edu`. Or create your own profile on the sign-in page.
+
+## Use it online
+
+Open <https://skill-exchange-85tb.onrender.com>. That is all. The server, the database and the
+pages are on [Render](https://render.com), which rebuilds them from this repository's `Dockerfile`
+on every push to `main`.
+
+Things to know about the free hosting plan:
+
+- **It sleeps when nobody uses it.** The first visit after a pause can take about a minute.
+- **Its data is not permanent.** There is no permanent disk, so whenever the service restarts
+  the database starts again from the demo data.
+
+The JavaFX desktop application can use the same hosted server:
+`java -jar skill-exchange.jar --server=https://skill-exchange-85tb.onrender.com`
+
+## Run it on your own computer
 
 You need **JDK 17 or newer** and, the first time only, an internet connection (the Maven wrapper
 downloads Maven, JavaFX, the SQLite driver and JUnit).
@@ -26,83 +47,50 @@ downloads Maven, JavaFX, the SQLite driver and JUnit).
 |---|---|---|
 | The desktop application | `./run.sh` | `run.bat` |
 | Only the server | `./run.sh server` | `run.bat server` |
+| The server with the web site on port 8080 | `./run.sh server --http-port 8080` | `run.bat server --http-port 8080` |
 | The concurrency demo in the terminal | `./run.sh demo` | `run.bat demo` |
-| The 61 JUnit tests | `./run.sh test` | `run.bat test` |
+| The 69 JUnit tests | `./run.sh test` | `run.bat test` |
+| One JAR that is both server and application | `./run.sh package` | `run.bat package` |
 
 `./run.sh` on its own is enough: if no server is running on this computer, the application starts
-one inside itself. The first run creates `data/skillexchange.db` and loads demo data.
+one inside itself. The first run creates `data/skillexchange.db` and loads demo data. With
+`--http-port 8080` the web site is at `http://localhost:8080`.
 
-**Demo accounts** (password `demo1234` for all): `asha@uni.edu`, `ravi@uni.edu`, `meera@uni.edu`,
-`kabir@uni.edu`. Or create your own account on the sign-in screen.
+`./run.sh package` creates `target/skill-exchange.jar` (about 23 MB). It needs only Java 17 or
+newer, and holds the JavaFX libraries for Windows, Linux and Macs with Apple silicon (on an Intel
+Mac, run from source). `java -jar skill-exchange.jar` is the desktop application,
+`java -jar skill-exchange.jar server` is the server.
 
-**To see two students interact**, start the server once and the application twice:
-
-```
-./run.sh server        # terminal 1: type help, stats, clients, backup or quit
-./run.sh               # terminal 2: sign in as asha@uni.edu
-./run.sh               # terminal 3: sign in as ravi@uni.edu
-```
-
-Send a chat message in one window and it appears in the other at once. Book a slot in one window
-and it disappears from the other's list.
-
-Options: `./run.sh server --port 6000 --data mydata --reset` (`--reset` deletes the saved data),
-`./run.sh app --host=192.168.1.20 --port=6000` to connect to a server on another computer.
-
-Without the scripts: `./mvnw javafx:run` (application), `./mvnw compile exec:java` (server),
-`./mvnw test` (tests).
-
-## Deploy it
-
-This is a desktop application with a server, not a website. Deploying it means two things: run
-the server on a computer everyone can reach, and give each student the application.
-
-**1. Build one file that holds everything**
-
-```
-./run.sh package          (Windows: run.bat package)
-```
-
-This creates `target/skill-exchange.jar` (about 23 MB). It needs only Java 17 or newer to run,
-and holds the JavaFX libraries for Windows, Linux and Macs with Apple silicon. On an Intel Mac,
-run from source with `./run.sh` instead. The same file is both the application and the server.
-
-**2. Choose where the server runs**
-
-| Where | Start the server | Start the application |
-|---|---|---|
-| The same computer (a demo) | nothing to start | `java -jar skill-exchange.jar` (it starts its own server) |
-| A laptop on the same Wi-Fi | `java -jar skill-exchange.jar server` | `java -jar skill-exchange.jar --host=192.168.1.20` (that laptop's address; its firewall must allow port 5050) |
-| On the internet, on Render | Render builds and starts it from this repository | `java -jar skill-exchange.jar --server=https://skill-exchange-85tb.onrender.com` |
+| Where the server runs | How the desktop application finds it |
+|---|---|
+| The same computer | nothing to do |
+| A laptop on the same Wi-Fi | `--host=192.168.1.20` (that laptop's address; its firewall must allow port 5050) |
+| The hosted server | `--server=https://skill-exchange-85tb.onrender.com` |
 
 Server options: `--port 6000`, `--http-port 8080`, `--http-only`, `--data folder`, `--reset`.
 
-**The server on Render**
+## How the hosted server is reached
 
-The `Dockerfile` and `render.yaml` in this repository build the server and run it on
-[Render](https://render.com). Render rebuilds it on every push to `main`. Its address,
-`https://skill-exchange-85tb.onrender.com`, is for the desktop application; a browser only gets a
-line of text saying the server is up.
+A web host carries HTTP and nothing else, so the server has two doors
+(`server/SkillExchangeServer.java`):
 
-A web host carries HTTP and nothing else, so the server has two doors. Clients on the same
-network come in through a plain socket. Clients on the internet come in through an HTTP gateway
-(`server/HttpGateway.java`, built on the JDK's own `HttpServer`): each call is one request whose
-body is the same serialized object the socket would carry, and events are fetched by long
-polling. The application code never knows which door it used (`net/RemoteApi.java` is abstract,
-with a socket and an HTTP implementation).
-
-Things to know about the free hosting plan:
-
-- **It sleeps when nobody uses it.** The first connection after a pause can take about a minute;
-  the application shows a "connecting" screen meanwhile.
-- **Its data is not permanent.** There is no permanent disk, so whenever the service restarts
-  the database starts again from the demo data.
-- **The connection is encrypted** on this path, because the host serves HTTPS.
+- **A socket**, for desktop clients on the same network. Each call is a serialized object.
+- **An HTTP server** (`server/HttpGateway.java`, built on the JDK's own `HttpServer`), which
+  answers two kinds of client on one port:
+  - **Browsers** get the web site. `web/WebSite.java` receives each request, does the work
+    through the same `SkillExchangeApi` the desktop client uses, and `web/Pages.java` writes the
+    page. Sessions are a cookie; every form carries a secret of the visit; all output is escaped;
+    a Content-Security-Policy header forbids scripts.
+  - **The desktop application** posts the same serialized objects the socket would carry, and
+    fetches events by long polling. The application code never knows which door it used
+    (`net/RemoteApi.java` is abstract, with a socket and an HTTP implementation).
 
 ## What a student can do
 
-The interface keeps the design of the project's earlier web version (cream page, colour blobs,
-chunky pill buttons, light and dark themes), rebuilt entirely from JavaFX nodes.
+Both the web site and the desktop application have the same pages and the same design (cream
+page, colour blobs, chunky pill buttons, light and dark themes). The web site uses the stylesheet
+of the project's first web version; the desktop application rebuilds that look from JavaFX nodes.
+The screenshots below are of the desktop application.
 
 | Page | What it does |
 |---|---|
@@ -115,8 +103,10 @@ chunky pill buttons, light and dark themes), rebuilt entirely from JavaFX nodes.
 | Credits | Balance, credits held in escrow, how a swap is paid, and the full history. |
 | How it works | The main ideas, and the live concurrency test with one lane per thread. |
 
-Also: a search dialog (Ctrl+K, or Cmd+K on a Mac), a light and a dark theme (the moon button; the
-choice is remembered), and "Surprise me", which opens a random session you could book.
+Also: a light and a dark theme (the moon button; the choice is remembered) and "Surprise me",
+which opens a random session you could book. The desktop application adds a search dialog
+(Ctrl+K, or Cmd+K on a Mac) and updates itself the moment something changes on the server; on
+the web site only the chat reloads by itself.
 
 | | |
 |---|---|
@@ -146,12 +136,16 @@ drives the real screens with the demo account.
                                             persistence: DAOs, PreparedStatement  -> SQLite file
 ```
 
-Through the web address the path is the same, except that the three frames travel as HTTP
-requests through `server/HttpGateway` instead of down a socket.
+Through the web address the desktop client's path is the same, except that the three frames
+travel as HTTP requests through `server/HttpGateway` instead of down a socket.
+
+A browser takes a shorter path: `web/WebSite` receives the request, calls the same `ApiSession`
+directly (it runs in the server already), and `web/Pages` writes the page that goes back.
 
 | Package | Files | Job |
 |---|---|---|
-| `skillexchange.ui` | 18 | JavaFX pages, dialogs and the stylesheet's building blocks. No business rules. |
+| `skillexchange.ui` | 18 | The JavaFX desktop client: pages, dialogs and building blocks. No business rules. |
+| `skillexchange.web` | 4 | The web site: request handling (`WebSite`), the pages (`Pages`), HTML building blocks, the visit of one browser. No business rules. |
 | `skillexchange.api` | 3 | `SkillExchangeApi`, the interface both sides share; `Event`; the `@Open` annotation |
 | `skillexchange.net` | 5 | The wire format (`Frame`) and the client's proxy (`RemoteApi`), with its socket and HTTP implementations |
 | `skillexchange.server` | 7 | Socket server, HTTP gateway, the dispatcher that runs each call, event hub, admin console |
@@ -163,7 +157,7 @@ requests through `server/HttpGateway` instead of down a socket.
 | `skillexchange.io` | 3 | Module file reader, CSV writer, serialized backup |
 | `skillexchange.logging` | 2 | `java.util.logging` set-up and a custom formatter |
 
-102 source files, about 8,800 lines, plus 6 test classes.
+106 source files, about 10,500 lines, plus 7 test classes.
 
 ### What stops a slot being booked twice
 
@@ -194,7 +188,7 @@ So a tutor is paid only for sessions that happen, and a refund can never fail.
 | Unit | Topic | Where in the code |
 |---|---|---|
 | 1 | JDK, `main`, command-line arguments | `Launcher`, `server/ServerMain` (`--port`, `--data`, `--reset`), `ui/App` (`--host=`) |
-| 2 | Packages, classes, constructors, `this` | 12 packages; validating constructors in `model/Listing`, `model/Student` |
+| 2 | Packages, classes, constructors, `this` | 13 packages; validating constructors in `model/Listing`, `model/Student` |
 | 3 | Overloading, access control, `static`, `final` | Two `Student` constructors; `ModuleFileParser.parse(Path)` and `parse(BufferedReader)`; package-private DAOs' base class `persistence/Dao` |
 | 4 | Inheritance, abstract classes | `Listing` (abstract) with `PaidListing`, `CreditSwapListing`, `FreeListing`; `Dao` (abstract) |
 | 4 | Interfaces | Our own: `SkillExchangeApi`, `Repository<T>`, `Exercise` (constant, default and static methods, nested enum), `ui/View` |
@@ -221,7 +215,8 @@ So a tutor is paid only for sessions that happen, and a refund can never fail.
 | Lambdas, streams, method references | Throughout, for example `CreditsView.show` and `LearningService.questions` |
 | Security | Passwords stored as salted PBKDF2 hashes (`model/Passwords`); a deserialization filter in `server/Dispatcher`; SQL only through `PreparedStatement` |
 | Preferences | `java.util.prefs.Preferences` remembers the chosen theme (`ui/App`) |
-| Unit tests | JUnit 5, 61 tests in `src/test/java` |
+| Server-side web pages | `web/WebSite` and `web/Pages`: routing, forms, cookies, Post/Redirect/Get, HTML escaping, a Content-Security-Policy, with no JavaScript |
+| Unit tests | JUnit 5, 69 tests in `src/test/java` |
 
 ## Input validation
 
@@ -265,7 +260,7 @@ receives the questions only, and the server does the marking.
 
 ## Tests
 
-`./run.sh test` runs 61 tests against real SQLite databases in temporary folders:
+`./run.sh test` runs 69 tests against real SQLite databases in temporary folders:
 
 | Test class | What it proves |
 |---|---|
@@ -274,6 +269,7 @@ receives the questions only, and the server does the marking.
 | `LearningAndChatTest` | Marking, best scores, and that a chat is private to its two students |
 | `FilesTest` | The module file parser, CSV escaping, and that a backup keeps shared references but not passwords |
 | `ClientServerTest` | A real server and real socket clients: sign-in is required, exceptions cross the network, chat is pushed, the race has one winner in all 200 repeats |
+| `WebSiteTest` | The web site used the way a browser uses it: no scripts in the pages, sign-in and sign-up errors, booking and cancelling, chat, a quiz, a forged form refused, redirects that stay on the site |
 | `HttpTransportTest` | The same server through its HTTP gateway: sessions, exceptions, chat by long polling, and a socket client and an HTTP client sharing one server |
 
 ## Limitations
@@ -287,7 +283,8 @@ receives the questions only, and the server does the marking.
 - **Client and server must be the same version**, because objects travel by Java serialization.
 - **A server started by a window stops when that window closes.** For several users, start the server separately.
 - **Not used from the course:** `CallableStatement` (SQLite has no stored procedures) and `DataInputStream`/`DataOutputStream`.
-- The look of the screens comes from `src/main/resources/ui/app.css`. It is a JavaFX stylesheet applied to JavaFX controls; there is no HTML or JavaScript in the project.
+- **The web site does not update by itself**, except the chat, because it runs no JavaScript: reload a page to see what others changed. The desktop application updates live.
+- The desktop application's look comes from `src/main/resources/ui/app.css`, a JavaFX stylesheet; the web site's from `src/main/resources/web/styles.css`. There is no JavaScript in the project.
 - **The headings use the system's rounded typeface where there is one** (Arial Rounded on macOS). The earlier web version used the Nunito font, which is not bundled.
 
 ## Project layout
@@ -299,7 +296,9 @@ mvnw, mvnw.cmd, .mvn/           Maven wrapper
 src/main/java/skillexchange/    the application (see the package table above)
 src/main/resources/db/          schema.sql
 src/main/resources/modules/     demo exercise modules
-src/main/resources/ui/          app.css
+src/main/resources/ui/          app.css, the desktop application's JavaFX stylesheet
+src/main/resources/web/         styles.css, the web site's stylesheet
+Dockerfile, render.yaml         build and run the server on Render
 src/test/java/skillexchange/    JUnit tests
 docs/screenshots/               pictures taken by the application
 data/                           created at run time: database, logs, backups (not in git)
