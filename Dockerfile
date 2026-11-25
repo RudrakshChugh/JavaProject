@@ -1,6 +1,7 @@
-# Builds and runs the Skill Exchange SERVER in a container, for a web hosting service such as Render.
-# The desktop application is not run here; students start it on their own computers and point it
-# at the address of this server. Nothing in this file is needed to run the project on your own machine.
+# Builds and runs the Skill Exchange server in a container, for a web hosting service such as Render.
+# The server answers two kinds of client on one port: browsers get the web site (pages rendered by
+# Java, no JavaScript), and the JavaFX desktop application connects with --server=https://...
+# Nothing in this file is needed to run the project on your own machine.
 
 # Stage 1: build skill-exchange.jar with Maven and the full JDK.
 FROM maven:3.9-eclipse-temurin-21 AS build

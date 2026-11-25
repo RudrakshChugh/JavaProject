@@ -42,7 +42,7 @@ final class HttpRemoteApi extends RemoteApi {
         this.base = URI.create(text.endsWith("/") ? text : text + "/");
         try {
             // First make sure this really is our server (and wake it up if it was asleep).
-            HttpResponse<String> status = http.send(HttpRequest.newBuilder(base).timeout(WAKE_TIMEOUT).GET().build(),
+            HttpResponse<String> status = http.send(HttpRequest.newBuilder(base.resolve("status")).timeout(WAKE_TIMEOUT).GET().build(),
                     HttpResponse.BodyHandlers.ofString());
             if (status.statusCode() != 200 || !status.body().startsWith(GREETING))
                 throw new IOException("There is no Skill Exchange server at " + base);

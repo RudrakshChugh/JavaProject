@@ -6,6 +6,7 @@ import skillexchange.api.Event;
 import skillexchange.net.Frame;
 import skillexchange.net.Wire;
 import skillexchange.service.Services;
+import skillexchange.web.WebSite;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -28,7 +29,7 @@ import java.util.logging.Logger;
 /**
  * A second door into the same server, for clients that can only reach it through the web
  * (a hosting service that carries HTTP and nothing else). It uses the HTTP server that ships
- * with the JDK. There are no web pages: the bodies of the requests are the same serialized
+ * with the JDK. For the desktop application the bodies of the requests are the same serialized
  * {@link Frame} objects the socket carries.
  *
  * <pre>
@@ -36,8 +37,11 @@ import java.util.logging.Logger;
  * POST /rpc      body: a Frame.Call     answer: a Frame.Reply
  * GET  /events   waits up to 25 seconds for events, then answers with a list (long polling)
  * POST /bye      end the session
- * GET  /         one line of text saying the server is up (hosting services call this to check)
+ * GET  /status   a few lines of text saying the server is up
  * </pre>
+ *
+ * Those five addresses are for the desktop application. Every other address is a page of the
+ * web site ({@link WebSite}), which the same HTTP server answers for people using a browser.
  *
  * HTTP has no lasting connection, so "who is signed in" cannot live in a connection as it does
  * with a socket. Each client gets a session here, found again by the id it sends with every request.
@@ -58,6 +62,7 @@ final class HttpGateway implements AutoCloseable {
     private final HttpServer http;
     private final SecureRandom random = new SecureRandom();
     private final Map<String, WebSession> sessions = new ConcurrentHashMap<>();
+    private final WebSite site;
 
     /** One client's session: its API object and the events waiting to be collected. An inner class. */
     private final class WebSession implements EventHub.Sink {
@@ -87,11 +92,15 @@ final class HttpGateway implements AutoCloseable {
         this.services = services;
         this.hub = hub;
         this.http = HttpServer.create(new InetSocketAddress(port), 0);
-        http.createContext("/", this::status);
+        http.createContext("/status", this::status);
         http.createContext("/hello", exchange -> guarded(exchange, this::hello));
         http.createContext("/rpc", exchange -> guarded(exchange, this::rpc));
         http.createContext("/events", exchange -> guarded(exchange, this::events));
         http.createContext("/bye", exchange -> guarded(exchange, this::bye));
+        // Every other address belongs to the web site. A visitor in a browser gets an API object of
+        // the same class as a desktop client's; it only has nobody to push events to.
+        this.site = new WebSite(() -> new ApiSession(services, hub, event -> { }));
+        site.attach(http);
         // A waiting /events request holds its thread for up to 25 seconds, so the pool must be able to grow.
         AtomicInteger threadNo = new AtomicInteger(1);
         http.setExecutor(Executors.newCachedThreadPool(r -> {
@@ -125,7 +134,7 @@ final class HttpGateway implements AutoCloseable {
                 ended++;
             }
         }
-        return ended;
+        return ended + site.expireIdle();
     }
 
     @Override
@@ -160,8 +169,8 @@ final class HttpGateway implements AutoCloseable {
     private void status(HttpExchange exchange) throws IOException {
         try {
             String host = exchange.getRequestHeaders().getFirst("Host");
-            String text = GREETING + " is running.\n\nThis address is for the Skill Exchange desktop application, not for a browser.\n"
-                    + "Start the application with:\n\n    java -jar skill-exchange.jar --server=https://" + host + "\n";
+            String text = GREETING + " is running.\n\nThe web site is at https://" + host + "/\n"
+                    + "The desktop application connects with:\n\n    java -jar skill-exchange.jar --server=https://" + host + "\n";
             exchange.getResponseHeaders().set("Content-Type", "text/plain; charset=utf-8");
             respond(exchange, 200, text.getBytes(StandardCharsets.UTF_8));
         } finally {

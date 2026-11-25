@@ -74,7 +74,7 @@ class HttpTransportTest {
 
     @Test
     void theStatusPageSaysWhatTheAddressIsFor() throws Exception {
-        HttpResponse<String> page = HttpClient.newHttpClient().send(HttpRequest.newBuilder(address).GET().build(),
+        HttpResponse<String> page = HttpClient.newHttpClient().send(HttpRequest.newBuilder(address.resolve("/status")).GET().build(),
                 HttpResponse.BodyHandlers.ofString());
         assertEquals(200, page.statusCode());
         assertTrue(page.body().startsWith("Skill Exchange server is running"), page.body());
