@@ -1,0 +1,58 @@
+# Demo learning modules for the "Python for Beginners" listing.
+# The format is explained in the README and in io/ModuleFileParser.java.
+
+MODULE: Python 1 - Variables and types
+SUMMARY: Names, numbers and text: the first things you type in Python.
+
+MCQ: Which of these is a valid Python variable name?
+- 2cool
+* cool_2
+- cool-2
+- class
+
+TF: In Python you must declare the type of a variable before you use it. => false
+
+FILL: The built-in function that shows text on the screen is ____. => print | print()
+
+MCQ: What is the type of the value 3.14?
+- int
+* float
+- str
+- bool
+
+MCQ: What does len("hello") return?
+- 4
+* 5
+- 6
+- An error
+POINTS: 2
+
+TF: The values True and False belong to the type bool. => true
+
+MODULE: Python 2 - Conditions and loops
+SUMMARY: Making decisions with if, and repeating work with for and while.
+
+MCQ: Which keyword starts a loop that repeats while a condition stays true?
+* while
+- loop
+- repeat
+- until
+
+FILL: range(3) produces the numbers 0, 1 and ____. => 2
+
+TF: Indentation is optional in Python and only there to make code look tidy. => false
+
+MCQ: How many times does the body of "for i in range(2, 5):" run?
+- 2
+* 3
+- 4
+- 5
+POINTS: 2
+
+MCQ: Which keyword leaves a loop immediately?
+* break
+- stop
+- continue
+- pass
+
+FILL: The Python keyword that means "else if" is ____. => elif

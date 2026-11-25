@@ -1,359 +1,298 @@
-<p align="center">
-  <h1 align="center">Peer Tutoring & Skill Exchange Booking System</h1>
-  <p align="center">
-    <strong>A Core Java console application where students teach what they know, book what they want to learn, and pay with money, swap credits, or nothing at all.</strong>
-  </p>
-  <p align="center">
-    <img src="https://img.shields.io/badge/Java-26-red?logo=openjdk&logoColor=white" alt="Java">
-    <img src="https://img.shields.io/badge/Core%20Java-No%20Frameworks-blue" alt="Core Java">
-    <img src="https://img.shields.io/badge/Concurrency-synchronized-green" alt="Concurrency">
-    <img src="https://img.shields.io/badge/Persistence-Serialization-purple" alt="Serialization">
-    <img src="https://img.shields.io/badge/Build-javac-orange" alt="javac">
-  </p>
-</p>
+# Peer Tutoring and Skill Exchange Booking System
 
----
+**UCS553 Enterprise Web Application** · Akshat Kaushik · Rudraksh Chugh
 
-## Overview
+A booking system for peer tutoring, written entirely in Java. A student lists a skill, publishes
+time slots, and other students book them. A session is **paid**, **free**, or a **credit swap**
+paid with credits earned by teaching. Learner and tutor can **chat** to agree what, how and where,
+and a tutor can attach **exercise modules** that the server marks.
 
-Students often know something worth teaching, like Java, guitar, calculus or a language, and want to learn something else in return. This system lets a student **list a skill** and publish **time slots** for it. Other students can **browse, search and book** a session.
+It has three parts, all Java:
 
-Each listing is one of three types:
-
-| Listing type | How the learner pays |
-|---|---|
-| **Paid** | A fee in rupees (e.g. `Rs. 200.00`) |
-| **Credit Swap** | Skill-exchange credits, earned by teaching others |
-| **Free** | Nothing (volunteer session) |
-
-> **Key Differentiator:** Swap sessions use an **escrow-based credit ledger**. When a learner books, their credits are *held*, not paid. The tutor receives them only after the learner confirms the session took place. If the booking is cancelled, the credits are refunded. Tutors are only paid for sessions that actually happen, and a refund can never fail because the tutor already spent the credits.
-
----
-
-## Screenshots
-
-The web front end, served by the JDK's built-in HTTP server. The home page updates itself: the numbers, the recent-bookings line, the countdown to your next session and the open sessions all change as other students book and publish, without a reload:
-
-<p align="center">
-  <img src="docs/screenshots/home.png" width="800" alt="Browse open tutoring sessions">
-</p>
-
-The **Credits** page shows the escrow ledger: the available balance, the credits currently held for unconfirmed sessions, and every movement with the booking it belongs to:
-
-<p align="center">
-  <img src="docs/screenshots/credits.png" width="800" alt="Credit balance, escrow and history">
-</p>
-
-The **How it works** page runs the concurrency test live. Without synchronization all 8 threads book the same slot; with it, exactly one does:
-
-<p align="center">
-  <img src="docs/screenshots/concurrency-race.png" width="800" alt="Live concurrency race">
-</p>
-
----
-
-## System Architecture
-
-```mermaid
-graph TD
-    A[Student at Console] --> B[ConsoleApp Menu]
-    B --> C[Input Validation]
-    C --> D[BookingService]
-
-    D --> E[Students]
-    D --> F[Listings]
-    D --> G[Time Slots]
-    D --> H[Bookings]
-    D --> I[CreditLedger]
-
-    F --> F1[PaidListing]
-    F --> F2[CreditSwapListing]
-    F --> F3[FreeListing]
-
-    I --> I1[HOLD on booking]
-    I1 --> I2[RELEASE on completion]
-    I1 --> I3[REFUND on cancellation]
-
-    D -.->|Rule violations| X[Custom Exceptions]
-    X -.-> B
-
-    D --> P[DataStore]
-    P --> P1[skillexchange.dat<br/>serialized snapshot]
-    P --> P2[sessions.csv]
-    P --> P3[balances.txt]
-
-    classDef ui fill:#d4edda,stroke:#28a745,stroke-width:2px,color:#333;
-    classDef core fill:#cce5ff,stroke:#004085,stroke-width:2px,color:#333;
-    classDef credit fill:#fff3cd,stroke:#ffc107,stroke-width:2px,color:#333;
-    classDef err fill:#f8d7da,stroke:#dc3545,stroke-width:2px,color:#333;
-
-    class A,B,C ui;
-    class D,E,F,G,H,F1,F2,F3,P,P1,P2,P3 core;
-    class I,I1,I2,I3 credit;
-    class X err;
-```
-
----
-
-## Core Java Concepts Demonstrated
-
-| Concept | Where | How it is used |
+| Part | What it is | Main technology |
 |---|---|---|
-| **Inheritance** | `model/Listing.java` and its 3 subclasses | Abstract `Listing` holds the shared fields. `PaidListing`, `CreditSwapListing` and `FreeListing` extend it |
-| **Polymorphism** | `Listing.getCreditCost()`, `getPriceDescription()` | `BookingService.book()` charges credits through `getCreditCost()` and never checks the listing type |
-| **Encapsulation** | All model classes | Final fields and validating constructors. Only the service changes booking state |
-| **Collections** | `service/BookingService.java` | `LinkedHashMap` stores data by id, `ArrayList` holds results, a `Comparator` sorts slots by time, and `HashMap` stores ledger balances |
-| **Custom Exceptions** | `exception/` | A checked hierarchy: `BookingException` → `SlotAlreadyBooked`, `BookingConflict`, `InsufficientCredits`, plus `PersistenceException` |
-| **File Handling** | `persistence/DataStore.java` | `PrintWriter`/`BufferedWriter` export a CSV session history and a text credit report |
-| **Serialization** | `persistence/DataStore.java` | `ObjectOutputStream` saves the whole `BookingService` object to disk, and `ObjectInputStream` restores it |
-| **Multithreading** | `ConcurrencyDemo.java` | `ExecutorService`, `CountDownLatch`, `Future` and `AtomicInteger` simulate students booking at the same moment |
-| **Synchronization** | `BookingService`, `CreditLedger` | `synchronized` methods make "check, then book" one atomic step, and `volatile` fields keep booking state visible to every thread |
-| **Enums** | `BookingStatus`, `CreditTransaction.Type` | Booking life cycle and ledger entry types |
+| Desktop client | The windows students use | JavaFX |
+| Server (back end) | Enforces every rule, serves many clients at once | Sockets, thread pool, object serialization |
+| Database | Where everything is stored | SQLite through JDBC |
 
----
+![Home](docs/screenshots/04-home.png)
 
-## Booking Rules
+## Run it
 
-The service enforces every rule, and each violation throws a specific exception:
+You need **JDK 17 or newer** and, the first time only, an internet connection (the Maven wrapper
+downloads Maven, JavaFX, the SQLite driver and JUnit).
 
-| Rule | Exception |
-|---|---|
-| A slot can only be booked once | `SlotAlreadyBookedException` |
-| A slot that has already started cannot be booked | `BookingException` |
-| You cannot book your own session | `BookingConflictException` |
-| A learner cannot attend two sessions at the same time | `BookingConflictException` |
-| A learner cannot book a session while they are teaching | `BookingConflictException` |
-| A session cannot be booked while its tutor is attending another session at that time | `BookingConflictException` |
-| A tutor's slots cannot overlap | `BookingConflictException` |
-| A swap booking needs enough credits | `InsufficientCreditsException` |
-| Only the learner or the tutor can cancel a booking | `BookingException` |
-| Only the learner can confirm a session (this pays the tutor) | `BookingException` |
-| A session can only be confirmed once it has started | `BookingException` |
-| Only its own tutor can remove a slot, and only while nobody has booked it | `BookingException`, `SlotAlreadyBookedException` |
-| A listing cannot be deleted while it has a confirmed booking | `BookingException` |
-
-Every check runs **before** any state changes, so a failed booking leaves nothing half-done.
-
----
-
-## Credit Ledger (Escrow)
-
-```text
-Learner books a swap session    ->  HOLD     learner -2   (credits leave the learner's balance)
-Learner confirms it took place  ->  RELEASE  tutor   +2   (tutor is paid)
-        or
-Booking is cancelled            ->  REFUND   learner +2   (credits come back)
-```
-
-Every movement is recorded as a `CreditTransaction` with a timestamp. The history is shown in the app and exported to `data/balances.txt`.
-
----
-
-## Concurrency Results
-
-`ConcurrencyDemo` releases 8 threads at the same instant using a `CountDownLatch`:
-
-| Scenario | Without synchronization | With `synchronized` |
+| To start | macOS / Linux | Windows |
 |---|---|---|
-| 8 students book the **same slot** | **Slot booked 8 times** | 1 booked, 7 × `SlotAlreadyBookedException` |
-| 1 learner with 3 credits books **8 different 2-credit slots** | n/a | 1 booked, 7 × `InsufficientCreditsException`, balance never negative |
-| Same-slot race repeated **200 rounds** | n/a | **200/200 rounds with exactly one winner** |
+| The desktop application | `./run.sh` | `run.bat` |
+| Only the server | `./run.sh server` | `run.bat server` |
+| The concurrency demo in the terminal | `./run.sh demo` | `run.bat demo` |
+| The 54 JUnit tests | `./run.sh test` | `run.bat test` |
 
-Locks are always taken in the order service → ledger, and the ledger never calls back into the service, so there is no possibility of deadlock.
+`./run.sh` on its own is enough: if no server is running on this computer, the application starts
+one inside itself. The first run creates `data/skillexchange.db` and loads demo data.
 
----
+**Demo accounts** (password `demo1234` for all): `asha@uni.edu`, `ravi@uni.edu`, `meera@uni.edu`,
+`kabir@uni.edu`. Or create your own account on the sign-in screen.
 
-## Repository Structure
+**To see two students interact**, start the server once and the application twice:
 
-```text
-├── src/skillexchange/
-│   ├── Main.java                  # Entry point: load data, seed demo data, start menu
-│   ├── DemoData.java              # Sample students, listings and slots for the first run
-│   ├── ConcurrencyDemo.java       # Race condition vs. synchronized booking
-│   ├── model/
-│   │   ├── Student.java
-│   │   ├── Listing.java           # Abstract base class
-│   │   ├── PaidListing.java
-│   │   ├── CreditSwapListing.java
-│   │   ├── FreeListing.java
-│   │   ├── TimeSlot.java
-│   │   ├── Booking.java
-│   │   ├── BookingStatus.java
-│   │   └── CreditTransaction.java
-│   ├── service/
-│   │   ├── BookingService.java    # All booking rules, thread-safe
-│   │   └── CreditLedger.java      # Escrow credit balances and history
-│   ├── exception/                 # Custom checked exceptions
-│   ├── persistence/
-│   │   └── DataStore.java         # Serialization + CSV/text exports
-│   ├── ui/
-│   │   ├── ConsoleApp.java        # Menu (no business logic)
-│   │   └── Input.java             # Validated console input
-│   └── web/
-│       ├── WebServer.java         # JSON API + static files on the JDK HttpServer
-│       ├── RaceDemo.java          # Concurrency race for the web page
-│       └── Json.java              # Minimal JSON writer
-├── web/                           # Front end: index.html, styles.css, app.js
-├── Dockerfile                     # Container build, for hosting services
-├── render.yaml                    # Render deployment settings
-├── data/                          # Created at runtime (saved state and reports)
-├── out/                           # Compiled classes
-└── README.md
+```
+./run.sh server        # terminal 1: type help, stats, clients, backup or quit
+./run.sh               # terminal 2: sign in as asha@uni.edu
+./run.sh               # terminal 3: sign in as ravi@uni.edu
 ```
 
----
+Send a chat message in one window and it appears in the other at once. Book a slot in one window
+and it disappears from the other's list.
 
-## Quick Start
+Options: `./run.sh server --port 6000 --data mydata --reset` (`--reset` deletes the saved data),
+`./run.sh app --host=192.168.1.20 --port=6000` to connect to a server on another computer.
 
-### 1. Requirements
-- JDK 17 or newer (the code uses switch expressions, `instanceof` patterns and `Stream.toList()`). It was developed on **Java 26** and has also been built and run on **Java 21**.
-- No build tool or external libraries
+Without the scripts: `./mvnw javafx:run` (application), `./mvnw compile exec:java` (server),
+`./mvnw test` (tests).
 
-### 2. Compile
-```powershell
-javac -d out (Get-ChildItem -Recurse src -Filter *.java).FullName
+## Deploy it
+
+This is a desktop application with a server, not a website, so there is no single link to open.
+Deploying it means two things: run the server on a computer everyone can reach, and give each
+student the application.
+
+**1. Build one file that holds everything**
+
 ```
-On macOS/Linux:
-```bash
-javac -d out $(find src -name "*.java")
-```
-
-### 3. Run the App
-```bash
-java -cp out skillexchange.Main
-```
-On the first run, demo data is loaded. Log in as **S1 to S4** (Asha, Ravi, Meera, Kabir) with the demo password `demo123`, or register a new student with a password of your own. New students start with **5 credits**.
-
-To delete saved data and start fresh:
-```bash
-java -cp out skillexchange.Main --reset
+./run.sh package          (Windows: run.bat package)
 ```
 
-### 4. Run the Concurrency Demo
-```bash
-java -cp out skillexchange.ConcurrencyDemo
+This creates `target/skill-exchange.jar` (about 23 MB). It needs only Java 17 or newer to run,
+and holds the JavaFX libraries for Windows, Linux and Macs with Apple silicon. On an Intel Mac,
+run from source with `./run.sh` instead.
+
+**2. Start the server** on the computer that will keep the data:
+
+```
+java -jar skill-exchange.jar server
 ```
 
-### 5. Run the Web App
-```bash
-java -cp out skillexchange.web.WebServer            # then open http://localhost:8080
-java -cp out skillexchange.web.WebServer --reset    # start fresh with demo data
-java -cp out skillexchange.web.WebServer 9090       # use another port
+It listens on port 5050 and keeps its database, logs and backups in a `data` folder next to it.
+Options: `--port 6000`, `--data folder`, `--reset`.
+
+**3. Start the application** on each student's computer, pointing at the server:
+
 ```
-Run it from the project root so it can find the `web/` folder. The web app and the console app share the same `data/` folder, so run one at a time.
-
-The web front end is built on the JDK's own `com.sun.net.httpserver`, so it still needs no frameworks or libraries. It has screens to browse and book slots, manage your bookings, create listings and time slots, and view your credit history. The **How it works** page runs the concurrency race live in the browser.
-
-- **A playful look in light and dark.** Grape purple leads, with sunshine yellow, mint, pink and sky as supporting colours. Every colour is a CSS variable at the top of `web/styles.css`, so the palette can be changed in one place. The first visit follows the system's light or dark setting, and the toggle in the top bar remembers your choice.
-- **Live updates.** The page asks the server for changes every 6 seconds. When another student books your session, confirms it, cancels, or publishes a new slot, you see a notice and the page updates in place. Open the app in two browser windows with two profiles to watch it.
-- **Explore.** Skill tiles filter the sessions with one click, tutor names open a profile with everything that person teaches, and **Surprise me** picks a random session you could book.
-- **Search palette.** Press `Ctrl+K` (`⌘K` on a Mac) or `/` to jump to any page, skill, person or action.
-- Each screen has its own address (`#/browse`, `#/bookings`, `#/teach`, `#/credits`, `#/how`), so the back button and page refresh work.
-- Cancelling a booking and confirming a session both ask first and say what will happen to the held credits.
-- The layout adapts to phone-sized screens, and all motion is switched off for visitors whose system asks for reduced motion.
-
-Everything on screen comes from the API. The moving dots in the concurrency race are the one illustration: the result in each lane is the real outcome, but the speed of each dot is only for show.
-
-The API checks every request itself rather than trusting the form: field lengths, number ranges (a fee of `NaN` or `Infinity` is refused), email format, how far ahead a slot may be (one year), and that the request comes from the app's own page and not from another site.
-
-### Signing in
-
-Every student has a password. The server never stores it: `model/Passwords.java` turns it into a salted PBKDF2 hash using only classes from the JDK, and that hash is what gets saved.
-
-- `POST /api/login` checks the password and answers with a random session token in a cookie (`HttpOnly`, `SameSite=Strict`).
-- Every request that acts for a student (booking, cancelling, confirming, teaching) takes the student from that session, never from a parameter, so one student cannot act as another.
-- A student's bookings, credit balance and history are sent only to that student. Everyone else sees a name, what they teach and their open times.
-- Five wrong passwords in a row pause sign-in for that profile for 30 seconds.
-- Sessions live in memory, so restarting the server signs everyone out.
-
-This is sign-in for a learning project. It runs over plain HTTP on localhost; putting it on the internet would need HTTPS in front of it.
-
-### Trying the whole flow in a demo
-
-A session can only be confirmed once it has started, so to show "confirm, and the tutor is paid" live:
-
-1. Sign in as a tutor and add a time slot one or two minutes from now.
-2. In a second browser window, sign in as another student and book it.
-3. When the countdown on **My bookings** reaches the start time, the **Confirm it took place** button appears by itself.
-
----
-
-## Deploying the Web App
-
-The web app can run on a hosting service that builds a Dockerfile. GitHub Pages cannot host it, because it only serves static files and this app needs its Java server.
-
-The repository includes a `Dockerfile` and a `render.yaml` for [Render](https://render.com), whose free web service needs no payment card:
-
-1. Create a Render account and open `https://render.com/deploy?repo=https://github.com/RudrakshChugh/JavaProject`.
-2. Confirm the service it proposes (`skill-exchange`, free plan). Render builds the image and gives the app an `onrender.com` address with HTTPS.
-
-What changes when it runs on a host:
-
-| On your machine | On a hosting service |
-|---|---|
-| Listens on `localhost` only | Listens on every interface, on the port given in `PORT` |
-| Answers only to `localhost` | Also answers to its public name, from `PUBLIC_HOST` or Render's `RENDER_EXTERNAL_HOSTNAME` |
-| Session cookie sent over HTTP | Session cookie marked `Secure` when the visitor is on HTTPS |
-
-Things to know about a free deployment:
-
-- **Saved data does not last.** Render's free service has no permanent disk and goes to sleep after 15 minutes without visitors. When it wakes, the app starts again with the demo data, and everyone is signed out. The first visit after a sleep takes about a minute.
-- **One time zone.** Slot times are plain local times. The `Dockerfile` sets `TZ=Asia/Kolkata`; change it if your users are elsewhere.
-- **It is a public demo.** Anyone with the link can create a profile (up to 500) and sign in to the demo profiles.
-
-On another host, set `PUBLIC_HOST` to the address the app is served on, for example `PUBLIC_HOST=skills.example.com`.
-
----
-
-## Using the App
-
-```text
---- Priya (S5) | 5 credits ---
- 1. Browse open slots
- 2. Search listings by skill
- 3. Book a slot
- 4. My bookings
- 5. Cancel a booking
- 6. Confirm a session took place (pays the tutor)
- 7. Create a listing (teach a skill)
- 8. Add a time slot to my listing
- 9. My listings and slots
-10. Credit balance and history
-11. Remove a time slot
-12. Delete a listing
- 0. Log out
+java -jar skill-exchange.jar --host=192.168.1.20
 ```
 
-Sample session:
-
-```text
-Slot id to book (blank to go back): T9
-Book Python with Ravi for 3 credits? (y/n): y
-Booked! Booking B3: Priya -> Python on 2026-11-05 [CONFIRMED]
-Held until you confirm the session took place: 3 credits
-
-Slot id to book (blank to go back): T7
-Book Spoken French with Kabir for 1 credit? (y/n): y
-Could not book: Priya needs 1 credit but has only 0
-```
-
----
-
-## Data Files
-
-All data is stored in `data/` and saved automatically after every change:
-
-| File | Format | Purpose |
+| Where the server runs | What students use as `--host` | Notes |
 |---|---|---|
-| `skillexchange.dat` | Java serialization | The full application state, loaded on startup |
-| `sessions.csv` | CSV | Session history (opens in Excel) |
-| `balances.txt` | Text | Credit balance and transaction history for each student |
+| The same computer (a demo) | nothing: `java -jar skill-exchange.jar` | The application starts its own server if none is running. |
+| A laptop on the same Wi-Fi | that laptop's IP address | Its firewall must allow incoming connections on port 5050. |
+| A computer with a public address, such as a cloud virtual machine | its address | Open TCP port 5050. The connection is not encrypted, so see Limitations. |
 
-Saving writes to a temporary file first and then renames it over the real file, so a crash mid-save cannot damage the previous save.
+The project's earlier web version was hosted on Render. That does not work for this version:
+a Render web service receives HTTP requests, and this server speaks its own protocol over a plain
+TCP socket.
 
-> After changing the fields of any model class, run with `--reset`, because older `.dat` files cannot be loaded into changed classes.
+Tested: all three commands on one Mac. Not tested: two different computers, and the JAR on
+Windows and Linux.
 
----
+## What a student can do
 
-## Academic Note
-This project was built as a semester Core Java project to demonstrate object-oriented design, collections, exception handling, file I/O, serialization and multithreading. It is a learning project and not a production booking platform.
+The interface keeps the design of the project's earlier web version (cream page, colour blobs,
+chunky pill buttons, light and dark themes), rebuilt entirely from JavaFX nodes.
+
+| Page | What it does |
+|---|---|
+| Browse | The home page. Numbers, recent bookings, skills on offer, and every open session as a card. Search, filter by type, book, message the tutor, or open a tutor's profile. Visitors can look around without an account. |
+| Sign in | A dialog with email and password, the four demo students, and a create-profile form. Every field is checked while you type. |
+| My bookings | Sessions as learner and as tutor, with a live countdown, where to meet, and what is happening to the credits. Cancel, confirm that a session took place, message, export as CSV. |
+| Teach | Create a listing, publish time slots (online link or room), write or import exercise modules, see learners' scores. |
+| Messages | Live chat between a learner and a tutor. |
+| Learn | Take a module's exercises (multiple choice, true/false, fill in the blank) and get marked at once. |
+| Credits | Balance, credits held in escrow, how a swap is paid, and the full history. |
+| How it works | The main ideas, and the live concurrency test with one lane per thread. |
+
+Also: a search dialog (Ctrl+K, or Cmd+K on a Mac), a light and a dark theme (the moon button; the
+choice is remembered), and "Surprise me", which opens a random session you could book.
+
+| | |
+|---|---|
+| ![Open sessions](docs/screenshots/05-open-sessions.png) | ![Booking dialog](docs/screenshots/06-book-dialog.png) |
+| ![Validation](docs/screenshots/03-validation.png) | ![My bookings](docs/screenshots/07-my-bookings.png) |
+| ![Teach](docs/screenshots/08-teach.png) | ![Messages](docs/screenshots/09-messages.png) |
+| ![Learn](docs/screenshots/10-learn.png) | ![Quiz result](docs/screenshots/12-quiz-result.png) |
+| ![Credits](docs/screenshots/13-credits.png) | ![Race](docs/screenshots/15-race-result.png) |
+| ![Visitor](docs/screenshots/01-home-visitor.png) | ![Dark theme](docs/screenshots/16-home-dark.png) |
+
+The pictures are taken by the application itself (`./run.sh app --shots=docs/screenshots`), which
+drives the real screens with the demo account.
+
+## How it is built
+
+```
+ JavaFX client (ui)                         Server (server)                       Database
+ ------------------                         ---------------                       --------
+ event handler                              ServerSocket + thread pool
+   -> api.book(slotId)                        one ClientHandler per connection
+        |                                        | reflection: Method.invoke
+   dynamic proxy (net.RemoteApi)                 v
+        |  Frame.Call  ---- socket ---->    ApiSession  (who is signed in)
+        |  Frame.Reply <--- socket -----         |
+        |  Frame.Push  <--- socket -----    service layer: rules, lock, transaction
+   Platform.runLater -> update screen            |
+                                            persistence: DAOs, PreparedStatement  -> SQLite file
+```
+
+| Package | Files | Job |
+|---|---|---|
+| `skillexchange.ui` | 18 | JavaFX pages, dialogs and the stylesheet's building blocks. No business rules. |
+| `skillexchange.api` | 3 | `SkillExchangeApi`, the interface both sides share; `Event`; the `@Open` annotation |
+| `skillexchange.net` | 2 | The wire format (`Frame`) and the client's proxy (`RemoteApi`) |
+| `skillexchange.server` | 5 | Socket server, one handler per client, event hub, admin console |
+| `skillexchange.service` | 9 | Every rule: bookings, credit ledger, accounts, chat, learning, demo data, race demo |
+| `skillexchange.persistence` | 13 | `Database` (transactions) and one Data Access Object per table |
+| `skillexchange.model` | 29 | The things the system is about. All serializable, so they can cross the network. |
+| `skillexchange.validation` | 1 | `Validator`: one set of input rules used by the client and the server |
+| `skillexchange.exception` | 11 | The custom exception hierarchy |
+| `skillexchange.io` | 3 | Module file reader, CSV writer, serialized backup |
+| `skillexchange.logging` | 2 | `java.util.logging` set-up and a custom formatter |
+
+97 source files, about 8,200 lines, plus 5 test classes.
+
+### What stops a slot being booked twice
+
+Each client is served by its own thread, so two bookings for the same slot can run at the same
+moment. Three things together prevent a double booking (`service/BookingService.java`):
+
+1. **A lock.** Methods that change data hold the write lock of a `ReentrantReadWriteLock`, so
+   "is it free?" and "mark it booked" are one step.
+2. **A transaction.** The booking row, the slot, the credit balance and the ledger entry are
+   committed together. If the learner cannot afford it, everything is rolled back.
+3. **A UNIQUE index** in the database that refuses a second confirmed booking of one slot.
+
+`./run.sh demo` shows the difference: 8 threads book one slot 8 times without a lock, and exactly
+once through the service, in each of 200 repeats. The How it works page runs the same test live.
+
+### Credits are held in escrow
+
+| Action | Ledger entry | Effect |
+|---|---|---|
+| Learner books a swap session | `HOLD` | Credits leave the learner's balance and are held against the booking |
+| Learner confirms it took place | `RELEASE` | The held credits are added to the tutor's balance |
+| Booking is cancelled | `REFUND` | The held credits go back to the learner |
+
+So a tutor is paid only for sessions that happen, and a refund can never fail.
+
+## Course topics and where each one is used
+
+| Unit | Topic | Where in the code |
+|---|---|---|
+| 1 | JDK, `main`, command-line arguments | `Launcher`, `server/ServerMain` (`--port`, `--data`, `--reset`), `ui/App` (`--host=`) |
+| 2 | Packages, classes, constructors, `this` | 12 packages; validating constructors in `model/Listing`, `model/Student` |
+| 3 | Overloading, access control, `static`, `final` | Two `Student` constructors; `ModuleFileParser.parse(Path)` and `parse(BufferedReader)`; package-private DAOs' base class `persistence/Dao` |
+| 4 | Inheritance, abstract classes | `Listing` (abstract) with `PaidListing`, `CreditSwapListing`, `FreeListing`; `Dao` (abstract) |
+| 4 | Interfaces | Our own: `SkillExchangeApi`, `Repository<T>`, `Exercise` (constant, default and static methods, nested enum), `ui/View` |
+| 4 | Nested classes, varargs | Inner class `MessagesView.Bubble`; static nested `ModuleFileParser.Pending`; nested interface `EventHub.Sink`; anonymous classes in `ui/Ui`, `ui/FormField`, `ui/SignIn`; varargs in `Dao.list(...)` |
+| 5 | Conventions, build tools | Maven: `pom.xml`, `src/main/java`, `src/test/java`, the Maven wrapper |
+| 6 | Exceptions | Checked hierarchy under `SkillExchangeException`; unchecked `DataAccessException`; chaining in `Database.inTransaction`; multi-catch in `TeachView.writeModule`; `finally` in `BookingService.change` |
+| 7 | Collections, generics, utility classes | `LinkedHashMap`, `HashSet`, `EnumMap`, `ArrayDeque`, `ConcurrentHashMap`; explicit `Iterator` in `EventHub.deliver`; `Comparator` in `LearnView`; `Collectors.groupingBy` in `BrowseView`; generic interface `Repository<T>`, generic methods in `Dao`; `Optional` returned by every `findById` |
+| 8 | File handling | Reads text: `io/ModuleFileParser`, `Database.readStatements`. Writes text: `io/SessionCsv`. Bytes: `io/Backup`. All with try-with-resources. |
+| 9 | Serialization | Every call and reply crosses the socket as a serialized `Frame`; `transient` password fields in `Student`; `serialVersionUID`; `io/Backup` keeps shared references |
+| 10 | Logging | `logging/LogConfig`: `Logger` per class, levels, `ConsoleHandler`, two `FileHandler`s, a custom `Formatter`, a `Filter` for the audit log |
+| 11 | JDBC | `persistence/`: `DriverManager`, `PreparedStatement`, `ResultSet`, generated keys, a batch insert, transactions with commit and rollback, the DAO pattern |
+| 12 | JavaFX GUI | `ui/App` (`init`, `start`, `stop`), `Stage` and `Scene`, a second modal `Stage` (`QuizWindow`), `BorderPane`, `GridPane`, `HBox`, `VBox`, `StackPane`, shapes and `SVGPath` icons, a JavaFX stylesheet |
+| 13 | JavaFX events | Event handlers as anonymous class (`SignIn`) and lambda, key events and an event filter (`MainView`), `ChangeListener`, property bindings, input validation (`FormField`), an `Alert` for connection errors (`Ui.alert`), in-window dialogs (`Modal`), notifications (`MainView.toast`), animations (`Timeline`, transitions), the sign-in form |
+
+### Beyond the slide decks
+
+| Topic | Where |
+|---|---|
+| Multithreading | `ExecutorService`, `ScheduledExecutorService`, `ReentrantReadWriteLock`, `synchronized`, `volatile`, `CountDownLatch`, `Semaphore`, `AtomicInteger`, `CompletableFuture`, `CopyOnWriteArrayList`; JavaFX `Task` and `Platform.runLater` |
+| Networking | `ServerSocket` and `Socket` (`server/SkillExchangeServer`, `net/RemoteApi`) |
+| Reflection | Dynamic proxy in `net/RemoteApi`; `Method.invoke` in `server/ClientHandler` |
+| Custom annotation | `api/Open`, read at run time to decide which methods need sign-in |
+| Records, sealed interfaces | `Frame`, `Event`, `Exercise` and most of `model/` |
+| Lambdas, streams, method references | Throughout, for example `CreditsView.show` and `LearningService.questions` |
+| Security | Passwords stored as salted PBKDF2 hashes (`model/Passwords`); a deserialization filter in `ClientHandler`; SQL only through `PreparedStatement` |
+| Preferences | `java.util.prefs.Preferences` remembers the chosen theme (`ui/App`) |
+| Unit tests | JUnit 5, 54 tests in `src/test/java` |
+
+## Input validation
+
+All rules are in `validation/Validator.java`. The forms use them while you type, and the server
+applies the same rules again before storing anything.
+
+| Field | Rule |
+|---|---|
+| Email | Required. One `@`, no spaces, dots cannot start, end or repeat, a real-looking domain. Stored in lower case and **unique** (also enforced by the database). |
+| Password | 8 to 64 characters, at least one letter and one number. Five wrong attempts pause sign-in for that email for 30 seconds. |
+| Name | 2 to 40 characters: letters, spaces, dots, hyphens, apostrophes. |
+| Skill / description | 2 to 40 characters / at most 300. |
+| Duration, fee, credits | 15 to 240 minutes; Rs. 1 to 100,000; 1 to 10 credits. |
+| Slot | In the future and within a year. Online needs an `http(s)://` link, in person needs a room. |
+| Message | 1 to 1,000 characters. |
+| Module | Title 2 to 60 characters, 1 to 30 exercises, each with a question of 5 to 300 characters and 1 to 10 points. |
+
+## Writing exercise modules
+
+A tutor writes a module in the Teach screen or imports a `.txt` file in this format
+(`src/main/resources/modules/python-basics.txt` is a full example):
+
+```
+MODULE: Python 1 - Variables and types
+SUMMARY: Names, numbers and text.
+
+MCQ: Which of these is a valid Python variable name?
+- 2cool
+* cool_2
+- cool-2
+POINTS: 2
+
+TF: Indentation is optional in Python. => false
+
+FILL: The keyword that means "else if" is ____. => elif
+```
+
+The line starting with `*` is the right option. `POINTS:` is optional and belongs to the question
+above it. A mistake is reported with its line number. Answers never leave the server: a learner
+receives the questions only, and the server does the marking.
+
+## Tests
+
+`./run.sh test` runs 54 tests against real SQLite databases in temporary folders:
+
+| Test class | What it proves |
+|---|---|
+| `ValidatorTest` | Good and bad emails, passwords, names, links, ranges |
+| `BookingServiceTest` | Every booking rule, the escrow ledger, and that a failed booking is rolled back completely |
+| `LearningAndChatTest` | Marking, best scores, and that a chat is private to its two students |
+| `FilesTest` | The module file parser, CSV escaping, and that a backup keeps shared references but not passwords |
+| `ClientServerTest` | A real server and real socket clients: sign-in is required, exceptions cross the network, chat is pushed, the race has one winner in all 200 repeats |
+
+## Limitations
+
+- **No real payment.** A paid listing records a fee; nothing is collected.
+- **The connection is not encrypted.** Client and server talk over plain TCP, so use it on a trusted network. TLS would be the fix.
+- **An email address is checked for format and uniqueness, not ownership.** No confirmation mail is sent, and there is no password reset.
+- **One time zone.** Times are the local times of the computer the server runs on.
+- **SQLite allows one writer at a time.** That suits a college-sized system, not a large one.
+- **Client and server must be the same version**, because objects travel by Java serialization.
+- **A server started by a window stops when that window closes.** For several users, start the server separately.
+- **Not used from the course:** `CallableStatement` (SQLite has no stored procedures) and `DataInputStream`/`DataOutputStream`.
+- The look of the screens comes from `src/main/resources/ui/app.css`. It is a JavaFX stylesheet applied to JavaFX controls; there is no HTML or JavaScript in the project.
+- **The headings use the system's rounded typeface where there is one** (Arial Rounded on macOS). The earlier web version used the Nunito font, which is not bundled.
+
+## Project layout
+
+```
+pom.xml                         Maven build: dependencies, plugins, the single-JAR packaging
+run.sh, run.bat                 start scripts (app, server, demo, test, package)
+mvnw, mvnw.cmd, .mvn/           Maven wrapper
+src/main/java/skillexchange/    the application (see the package table above)
+src/main/resources/db/          schema.sql
+src/main/resources/modules/     demo exercise modules
+src/main/resources/ui/          app.css
+src/test/java/skillexchange/    JUnit tests
+docs/screenshots/               pictures taken by the application
+data/                           created at run time: database, logs, backups (not in git)
+```

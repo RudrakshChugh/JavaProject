@@ -1,0 +1,29 @@
+# Demo learning module for the "Java Basics" listing.
+
+MODULE: Java 1 - Classes and objects
+SUMMARY: The vocabulary of object-oriented programming in Java.
+
+MCQ: Which keyword creates a new object?
+* new
+- create
+- object
+- this
+
+TF: A constructor has the same name as its class and no return type. => true
+
+FILL: The keyword that refers to the current object is ____. => this
+
+MCQ: Which access modifier makes a member visible only inside its own class?
+- public
+- protected
+* private
+- No modifier (default)
+
+TF: A Java class can extend more than one class. => false
+
+MCQ: Which of these cannot be instantiated with new?
+- A final class
+* An abstract class
+- A class with a private field
+- A class with two constructors
+POINTS: 2

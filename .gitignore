@@ -1,6 +1,14 @@
-﻿# Build output and runtime data
+# Build output and runtime data
+target/
 out/
 data/
 
-# College template (not our work)
+# Editor and operating-system files
+.DS_Store
+.idea/
+.vscode/
+*.iml
+
+# Course slide decks and the college template (not our work)
+PPTS/
 Java Project Report Format.docx

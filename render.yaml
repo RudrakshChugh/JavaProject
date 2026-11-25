@@ -1,8 +1,0 @@
-# Render "Blueprint": tells Render how to build and run this app from the Dockerfile.
-# Deploy with https://render.com/deploy?repo=https://github.com/RudrakshChugh/JavaProject
-services:
-  - type: web
-    name: skill-exchange
-    runtime: docker
-    plan: free
-    healthCheckPath: /
